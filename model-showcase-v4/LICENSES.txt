@@ -1,0 +1,24 @@
+MODEL AND ANIMATION ASSETS
+==========================
+
+Male Ranger outfit:
+  Modular Character Outfits - Fantasy (Standard Free Version)
+  Author: Quaternius (@Quaternius)
+  Source: https://quaternius.com/packs/modularcharacteroutfitsfantasy.html
+  License: CC0 1.0 Universal / Public Domain Dedication
+  https://creativecommons.org/publicdomain/zero/1.0/
+
+Animations:
+  Universal Animation Library and Universal Animation Library 2
+  Author: Quaternius (@Quaternius)
+  Sources:
+  https://quaternius.com/packs/universalanimationlibrary.html
+  https://quaternius.com/packs/universalanimationlibrary2.html
+  License: CC0 1.0 Universal / Public Domain Dedication
+  https://creativecommons.org/publicdomain/zero/1.0/
+
+Three.js:
+  https://threejs.org/
+  License: MIT
+
+The small preview sword is generated at runtime by this showcase code.

@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <meta name="theme-color" content="#080b12">
+  <title>完整蒙皮英雄 V4</title>
+  <link rel="stylesheet" href="./style.css">
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "./vendor/three.module.min.js",
+        "three/addons/": "./vendor/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <main id="app">
+    <div id="stage" aria-label="可旋转的三维英雄模型"></div>
+    <div class="backdrop-grid"></div>
+    <div class="vignette"></div>
+
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">ARENA 3D · HERO PROTOTYPE / V4</p>
+        <h1>夜巡 · 玄刃</h1>
+        <p class="subtitle">完整蒙皮游侠 / 统一骨骼 / 原生战斗动作</p>
+      </div>
+      <div class="quality-badge"><span></span> 非方块人 · 正常人体比例</div>
+    </header>
+
+    <section class="hero-card" aria-label="模型说明">
+      <div class="role-mark">游侠</div>
+      <p class="hero-kicker">MOBA HERO SAMPLE</p>
+      <h2>夜巡 · 玄刃</h2>
+      <p>兜帽、肩甲、护腕、腰带与长靴均为同一套蒙皮模型，会跟随全身骨骼自然变形。</p>
+      <div class="stats">
+        <span>约 25K 顶点</span>
+        <span>65 根骨骼</span>
+        <span>11 个动作</span>
+      </div>
+    </section>
+
+    <div class="gesture-hint">单指旋转 · 双指缩放</div>
+
+    <nav class="action-bar" aria-label="动作预览">
+      <button class="action active" data-action="Sword_Idle"><i>◇</i><span>战斗待机</span></button>
+      <button class="action" data-action="Jog_Fwd_Loop"><i>➤</i><span>奔跑</span></button>
+      <button class="action" data-action="Sword_Attack"><i>⚔</i><span>普攻</span></button>
+      <button class="action" data-action="Sword_Regular_Combo"><i>✦</i><span>连击</span></button>
+      <button class="action" data-action="Sword_Heavy_Combo"><i>◆</i><span>重击</span></button>
+      <button class="action" data-action="Hit_Knockback"><i>◈</i><span>受击</span></button>
+    </nav>
+
+    <section id="loading" class="loading" aria-live="polite">
+      <div class="loader-ring"></div>
+      <p id="loading-title">正在装配完整英雄...</p>
+      <small id="loading-detail">读取模型、贴图与骨骼</small>
+    </section>
+
+    <section id="error-panel" class="error-panel" hidden>
+      <h2>模型没有加载成功</h2>
+      <p id="error-message"></p>
+      <button id="retry">重新加载</button>
+    </section>
+  </main>
+
+  <script type="module" src="./showcase.js"></script>
+</body>
+</html>
