@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+  <meta name="theme-color" content="#070b12">
+  <title>Arena 3D · 二代英雄模型</title>
+  <style>
+    *{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#070b12;color:#f6f2ea;font-family:system-ui,-apple-system,"Microsoft YaHei",sans-serif;touch-action:none}#stage,canvas{position:fixed;inset:0;width:100%;height:100%;display:block}
+    #loading{position:fixed;inset:0;display:grid;place-items:center;background:#070b12;z-index:20;color:#9eeaff;font-weight:900;letter-spacing:.1em;transition:.4s}#loading.hide{opacity:0;pointer-events:none}
+    .head{position:fixed;left:max(16px,env(safe-area-inset-left));right:max(16px,env(safe-area-inset-right));top:max(12px,env(safe-area-inset-top));display:flex;justify-content:space-between;align-items:flex-start;pointer-events:none;text-shadow:0 3px 15px #000}.head h1{font-size:clamp(18px,3vw,30px);margin:0;font-weight:950;letter-spacing:.08em}.head p{font-size:11px;color:#aab6c6;margin:5px 0}.tag{border:1px solid #a8e8ff55;background:#07131dcc;border-radius:999px;padding:6px 11px;color:#b9f0ff;font-size:11px}
+    .hero-info{position:fixed;left:max(16px,env(safe-area-inset-left));bottom:calc(93px + env(safe-area-inset-bottom));width:min(370px,calc(100% - 32px));padding:15px 17px;border-radius:17px;background:linear-gradient(110deg,#09131fea,#13263ee8);border:1px solid var(--accent,#50dfff);box-shadow:0 15px 45px #000b,0 0 28px color-mix(in srgb,var(--accent,#50dfff) 20%,transparent);backdrop-filter:blur(13px);pointer-events:none}.hero-info h2{margin:0;color:var(--accent,#77e7ff);font-size:clamp(24px,4vw,38px);font-weight:950;text-shadow:0 0 20px color-mix(in srgb,var(--accent) 40%,transparent)}.hero-info h3{margin:2px 0 6px;font-size:13px;color:#fff2cf}.hero-info p{margin:0;color:#aebccc;font-size:12px;line-height:1.55}
+    .switcher{position:fixed;right:max(16px,env(safe-area-inset-right));bottom:calc(102px + env(safe-area-inset-bottom));display:grid;gap:8px}.hero-btn{width:92px;height:48px;border:1px solid #ffffff25;border-radius:14px;background:#0d1927e8;color:#dce9f3;font-weight:800}.hero-btn.active{border-color:var(--c);color:#fff;box-shadow:0 0 20px color-mix(in srgb,var(--c) 35%,transparent);background:color-mix(in srgb,var(--c) 18%,#0d1927)}
+    .actions{position:fixed;left:0;right:0;bottom:0;display:flex;justify-content:center;gap:7px;padding:10px max(12px,env(safe-area-inset-right)) max(10px,env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left));background:linear-gradient(0deg,#03060af5,#07101800)}button{appearance:none;touch-action:manipulation;font:800 12px inherit;color:#d9e6ee;background:#102031e8;border:1px solid #ffffff24;border-radius:13px;padding:9px 15px;min-height:48px}button.active{color:#fff;border-color:var(--accent,#5ce1ff);background:color-mix(in srgb,var(--accent,#5ce1ff) 22%,#102031);box-shadow:0 0 16px color-mix(in srgb,var(--accent,#5ce1ff) 22%,transparent)}
+    .tip{position:fixed;right:16px;top:75px;text-align:right;color:#8798aa;font-size:10px;pointer-events:none}
+    @media(max-width:680px){.hero-info{bottom:calc(78px + env(safe-area-inset-bottom));padding:10px 13px;width:58%}.hero-info p{display:none}.switcher{bottom:calc(82px + env(safe-area-inset-bottom))}.actions{justify-content:flex-start;overflow-x:auto}.actions button{min-width:67px;padding:7px}.tag,.tip{display:none}}
+  </style>
+</head>
+<body>
+  <div id="stage"></div><div id="loading">正在装配二代英雄模型…</div>
+  <header class="head"><div><h1>高级英雄样板 · 东方与未来</h1><p>可旋转的游戏模型，不是二维概念图</p></div><div class="tag">拖动旋转 · 双指缩放 · 点击动作</div></header>
+  <div class="tip">拖动模型查看侧面与背面<br>下方可测试实机动作</div>
+  <section class="hero-info"><h2 id="name"></h2><h3 id="role"></h3><p id="desc"></p></section>
+  <aside class="switcher" id="switcher"></aside><nav class="actions" id="actions"></nav>
+  <script type="module" src="./showcase-v2.js"></script>
+</body>
+</html>
