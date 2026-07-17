@@ -1,0 +1,10 @@
+Hero base and long-hair mesh:
+  Universal Base Characters by Quaternius
+  https://quaternius.com/packs/universalbasecharacters.html
+  License: CC0 1.0 Universal (public domain dedication)
+
+Scene, armor, weapon design, effects and code:
+  Original work for Arena 3D.
+
+This sample intentionally does not use models, textures, logos, character names,
+audio or other proprietary assets from Honor of Kings or any other commercial MOBA.
