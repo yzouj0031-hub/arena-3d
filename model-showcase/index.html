@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+  <meta name="theme-color" content="#071018">
+  <title>Arena 3D · 英雄模型展厅</title>
+  <style>
+    *{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#071018;color:#eef8ff;font-family:system-ui,-apple-system,"Microsoft YaHei",sans-serif;touch-action:none}
+    #stage{position:fixed;inset:0;background:radial-gradient(circle at 50% 35%,#18344a 0,#091721 42%,#05090d 78%)}
+    canvas{display:block;width:100%;height:100%}
+    .top{position:fixed;left:max(14px,env(safe-area-inset-left));right:max(14px,env(safe-area-inset-right));top:max(12px,env(safe-area-inset-top));display:flex;align-items:flex-start;justify-content:space-between;gap:12px;pointer-events:none}
+    .title{font-weight:900;letter-spacing:.08em;font-size:clamp(18px,3vw,30px);text-shadow:0 2px 12px #000}.sub{margin-top:4px;font-size:12px;color:#9bb8c9;font-weight:500}.badge{padding:6px 10px;border:1px solid #5ce1ff66;background:#081521cc;border-radius:999px;font-size:12px;color:#85eaff}
+    .info{position:fixed;left:50%;bottom:calc(116px + env(safe-area-inset-bottom));transform:translateX(-50%);width:min(620px,calc(100% - 28px));padding:14px 18px;border:1px solid var(--accent,#5ce1ff66);background:linear-gradient(110deg,#07111eea,#102538dc);border-radius:18px;box-shadow:0 14px 45px #0009,0 0 35px color-mix(in srgb,var(--accent,#5ce1ff) 18%,transparent);backdrop-filter:blur(12px);text-align:center;pointer-events:none}
+    .name{font-size:clamp(22px,4vw,34px);font-weight:950;color:var(--accent,#7eeaff);text-shadow:0 0 18px color-mix(in srgb,var(--accent,#5ce1ff) 45%,transparent)}
+    .role{margin-top:2px;color:#d8e9f2;font-weight:700}.desc{margin-top:6px;color:#9db4c2;font-size:12px;line-height:1.5}
+    .bar{position:fixed;left:0;right:0;bottom:0;padding:10px max(12px,env(safe-area-inset-right)) max(10px,env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left));display:flex;justify-content:center;gap:8px;background:linear-gradient(0deg,#04080df2,#07101800)}
+    button{appearance:none;border:1px solid #ffffff24;background:#102231d9;color:#dcecf5;border-radius:13px;min-width:48px;height:54px;padding:7px 10px;font:700 11px inherit;box-shadow:inset 0 1px #ffffff12;touch-action:manipulation}button.active{border-color:var(--c,#5ce1ff);color:#fff;background:color-mix(in srgb,var(--c,#5ce1ff) 23%,#102231);box-shadow:0 0 18px color-mix(in srgb,var(--c,#5ce1ff) 25%,transparent)}button span{display:block;font-size:19px;margin-bottom:2px}
+    #status{position:fixed;inset:0;display:grid;place-items:center;background:#071018;color:#8deaff;font-weight:800;z-index:5;transition:.35s}#status.hide{opacity:0;pointer-events:none}
+    .hint{position:fixed;right:14px;top:72px;color:#8ea7b6;font-size:11px;text-align:right;pointer-events:none}
+    @media(max-width:700px){.info{bottom:calc(92px + env(safe-area-inset-bottom));padding:10px 14px}.bar{overflow-x:auto;justify-content:flex-start}.bar button{min-width:61px;height:48px}.desc{display:none}.hint{display:none}}
+  </style>
+</head>
+<body>
+  <div id="stage"></div>
+  <div id="status">正在召集六位英雄…</div>
+  <header class="top"><div><div class="title">诸界争锋 · 英雄展厅</div><div class="sub">真实 3D 模型预览 · 不影响正式游戏</div></div><div class="badge">拖动旋转 · 双指缩放</div></header>
+  <div class="hint">左右拖动：旋转模型<br>上下拖动：调整视角<br>双指/滚轮：缩放</div>
+  <section class="info" id="info"><div class="name" id="name"></div><div class="role" id="role"></div><div class="desc" id="desc"></div></section>
+  <nav class="bar" id="bar"></nav>
+  <script type="module" src="./showcase.js"></script>
+</body>
+</html>
