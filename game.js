@@ -115,10 +115,14 @@ function flashModel(h){if(!h.model)return;h.model.traverse(o=>{if(o.material&&o.
 
 function movePlayer(h,dt){let x=(keys.d?1:0)-(keys.a?1:0)+joy.x,z=(keys.s?1:0)-(keys.w?1:0)+joy.y,l=Math.hypot(x,z);if(l>.12){x/=l;z/=l;let sp=h.speed*(h.buff>0?1.3:1);h.pos.x=clamp(h.pos.x+x*sp*dt,-60,60);h.pos.z=clamp(h.pos.z+z*sp*dt,-29,29);h.root.rotation.y=Math.atan2(x,z);h.lastDir.set(x,0,z);setAnim(h,'sprint')}else setAnim(h,'idle')}
 function useUtility(type){if(!game||game.over||!game.player||game.player.dead||game.utility[type]>0)return;let p=game.player;if(type==='recall'){game.utility.recall=18;ring(p.pos,0x55cfff,3.3);trail(p.pos,0x7de6ff);p.pos.copy(p.spawn);p.hp=p.maxHp;p.mana=100;updateBar(p);feed(`${p.def.name} 已返回泉水`,0x7fe6ff)}else if(type==='heal'){game.utility.heal=14;heal(p,p.maxHp*.3);friends(p).filter(a=>a!==p&&a.pos.distanceTo(p.pos)<7).forEach(a=>heal(a,a.maxHp*.14));ring(p.pos,0x72ff91,4)}else if(type==='flash'){game.utility.flash=12;let from=p.pos.clone(),dir=p.lastDir.clone();if(dir.lengthSq()<.01)dir.set(1,0,0);p.pos.x=clamp(p.pos.x+dir.x*6.5,-60,60);p.pos.z=clamp(p.pos.z+dir.z*6.5,-29,29);trail(from,0xffd55c);trail(p.pos,0xffe58a)}}
-function step(h,dir,dt,rate=1){let v=dir.clone().setY(0);if(v.lengthSq()<1e-4)return;v.normalize();let sp=h.speed*(h.buff>0?1.25:1)*rate;h.pos.x=clamp(h.pos.x+v.x*sp*dt,-60,60);h.pos.z=clamp(h.pos.z+v.z*sp*dt,-29,29);h.root.rotation.y=Math.atan2(v.x,v.z);h.lastDir.copy(v);setAnim(h,rate>.85?'sprint':'walk')}
+function step(h,dir,dt,rate=1){let v=dir.clone().setY(0);if(v.lengthSq()<1e-4){setAnim(h,'idle');return}v.normalize();let sp=h.speed*(h.buff>0?1.25:1)*rate;h.pos.x=clamp(h.pos.x+v.x*sp*dt,-60,60);h.pos.z=clamp(h.pos.z+v.z*sp*dt,-29,29);h.root.rotation.y=Math.atan2(v.x,v.z);h.lastDir.copy(v);setAnim(h,rate>.85?'sprint':'walk')}
 function towerThreat(h,pos){return game.structures.find(s=>!s.dead&&s.team!==h.team&&s.pos.distanceTo(pos)<s.range+1.5)}
 function aiHero(h,dt){
  const es=enemies(h).filter(e=>!e.dead),hpr=h.hp/h.maxHp;
+ /* 看门狗:连续4秒几乎没有位移则强制推进,防止任何分支把AI卡住 */
+ if(!h._lastPos)h._lastPos=h.pos.clone();
+ if(h.pos.distanceTo(h._lastPos)<.35){h._stillT=(h._stillT||0)+dt}else{h._stillT=0;h._lastPos.copy(h.pos)}
+ if(h._stillT>4){h.retreat=false;const core=game.structures.find(c=>c.kind==='core'&&c.team!==h.team);if(core){step(h,core.pos.clone().sub(h.pos),dt,1);if(h.pos.distanceTo(h._lastPos)>.35){h._stillT=0;h._lastPos.copy(h.pos)}return}}
  const eh=es.filter(e=>e.kind==='hero'&&e.invis<=0),em=es.filter(e=>e.kind==='minion'),et=es.filter(e=>e.kind==='tower'||e.kind==='core');
  const mates=friends(h).filter(a=>a!==h),myMinions=game.minions.filter(m=>!m.dead&&m.team===h.team);
 
@@ -130,9 +134,8 @@ function aiHero(h,dt){
    const near=eh.filter(e=>e.pos.distanceTo(h.pos)<h.range+4);
    if(near.length&&h.cd[1]<=0&&h.mana>=22)cast(h,1);               // 追杀时交保命/位移技能
    if(near.length&&h.cd[3]<=0&&near[0].pos.distanceTo(h.pos)<=h.range+1)basic(h,null,near[0]);
-   step(h,h.spawn.clone().sub(h.pos),dt,1);
-   if(h.pos.distanceTo(h.spawn)<2)setAnim(h,'idle');
-   return}}
+   if(h.pos.distanceTo(h.spawn)>2.5){step(h,h.spawn.clone().sub(h.pos),dt,1);return}
+   setAnim(h,'idle');return}}
 
  /* —— 目标优先级:可击杀英雄 > 附近英雄 > 小兵(补刀推线) > 防御塔 —— */
  let t=null,intent='';
@@ -154,8 +157,8 @@ function aiHero(h,dt){
  const threat=towerThreat(h,t.pos);
  if(threat&&intent!=='push'&&!myMinions.some(m=>m.pos.distanceTo(threat.pos)<threat.range)){
   if(h.pos.distanceTo(threat.pos)<threat.range+2){step(h,h.pos.clone().sub(threat.pos),dt,1);return}}
- if(intent==='push'&&myMinions.filter(m=>m.pos.distanceTo(t.pos)<12).length===0&&hpr<.9){
-  step(h,h.spawn.clone().sub(h.pos),dt,.8);return}                  // 无兵线不强推
+ if(intent==='push'&&myMinions.filter(m=>m.pos.distanceTo(t.pos)<12).length===0&&hpr<.9&&h.pos.distanceTo(h.spawn)>9){
+  step(h,h.spawn.clone().sub(h.pos),dt,.8);return}                  // 无兵线不强推,但已在泉水则不再后退
 
  /* —— 走位:远程放风筝,近战贴脸 —— */
  const ideal=melee?1.8:h.range*.82;
@@ -172,7 +175,7 @@ function aiHero(h,dt){
   else if(h.cd[0]<=0&&h.mana>=22)cast(h,0);                                // 一技能:主力输出
   else if(h.cd[1]<=0&&h.mana>=22&&(h.id===1||h.id===4||hpr<.6||cluster>=2))cast(h,1);}
  if(h.id===4&&h.cd[1]<=0&&h.mana>=22&&mates.some(a=>a.hp/a.maxHp<.55&&a.pos.distanceTo(h.pos)<10))cast(h,1);}
-function update(dt){game.time+=dt;game.wave-=dt;for(const k in game.utility)game.utility[k]=Math.max(0,game.utility[k]-dt);if(game.wave<=0){spawnWave();game.wave=12}aiShop(dt);for(const h of game.heroes){h.mixer.update(dt);for(let i=0;i<4;i++)h.cd[i]=Math.max(0,h.cd[i]-dt);h.shield=Math.max(0,h.shield-dt);h.buff=Math.max(0,h.buff-dt);h.invis=Math.max(0,h.invis-dt);h.mana=Math.min(100,h.mana+7*dt);if(h.pos.distanceTo(h.spawn)<7.5&&h.hp<h.maxHp){h.hp=Math.min(h.maxHp,h.hp+h.maxHp*.22*dt);h.mana=100;updateBar(h)}h.goldT+=dt;if(h.goldT>=1){h.goldT-=1;h.gold+=2;if(h.player)updateGold()}if(h.invis<=0&&h.model.children.length&&h.root.visible&&!h._opaque){h.root.traverse(o=>{if(o.material){o.material.opacity=1;o.material.transparent=false}});h._opaque=true}if(h.dead){h.respawn-=dt;if(h.respawn<=0){h.dead=false;h.hp=h.maxHp;h.mana=100;h.pos.copy(h.spawn);h.root.visible=true;h._opaque=false;setAnim(h,'idle');updateBar(h)}continue}h.player?movePlayer(h,dt):aiHero(h,dt)}
+function update(dt){game.time+=dt;game.wave-=dt;for(const k in game.utility)game.utility[k]=Math.max(0,game.utility[k]-dt);if(game.wave<=0){spawnWave();game.wave=12}aiShop(dt);for(const h of game.heroes){h.mixer.update(dt);for(let i=0;i<4;i++)h.cd[i]=Math.max(0,h.cd[i]-dt);h.shield=Math.max(0,h.shield-dt);h.buff=Math.max(0,h.buff-dt);h.invis=Math.max(0,h.invis-dt);h.mana=Math.min(100,h.mana+7*dt);if(!h.dead&&h.pos.distanceTo(h.spawn)<7.5&&h.hp<h.maxHp){h.hp=Math.min(h.maxHp,h.hp+h.maxHp*.22*dt);h.mana=100;updateBar(h)}h.goldT+=dt;if(h.goldT>=1){h.goldT-=1;h.gold+=2;if(h.player)updateGold()}if(h.invis<=0&&h.model.children.length&&h.root.visible&&!h._opaque){h.root.traverse(o=>{if(o.material){o.material.opacity=1;o.material.transparent=false}});h._opaque=true}if(h.dead){h.respawn-=dt;if(h.respawn<=0){h.dead=false;h.hp=h.maxHp;h.mana=100;h.pos.copy(h.spawn);h.root.visible=true;h._opaque=false;h.retreat=false;h._stillT=0;h._lastPos=null;h.anim='';setAnim(h,'idle');updateBar(h)}continue}h.player?movePlayer(h,dt):aiHero(h,dt)}
  for(const m of game.minions){if(m.dead)continue;m.cd-=dt;if(m.gear){m.walk+=dt*9;m.gear.position.y=Math.abs(Math.sin(m.walk))*.08;m.gear.rotation.z=Math.sin(m.walk)*.06}let[t,d]=nearest(m);if(t&&d<m.range){if(m.cd<=0){m.cd=1.05;m.range>2?minionShot(m,t):hurt(m,t,m.atk)}}else{m.pos.x+=(m.team?-1:1)*m.speed*dt;m.root.rotation.y=m.team?-Math.PI/2:Math.PI/2}}
  for(const s of game.structures){if(s.dead)continue;s.cd-=dt;if(s.root.userData.gem)s.root.userData.gem.rotation.y+=dt;let[t,d]=nearest(s,enemies(s).filter(e=>e.kind!=='tower'&&e.kind!=='core'));if(t&&d<s.range&&s.cd<=0){s.cd=1;projectile(s,t,s.atk,s.team?0xff4868:0x42d6ff,20)}}
  for(const q of game.shots){if(q.target.dead){q.dead=true;continue}let v=q.target.pos.clone().add(new THREE.Vector3(0,.8,0)).sub(q.pos),d=v.length();if(d<.45){hurt(q.src,q.target,q.dmg);fxSprite(q.pos.clone(),q.color||0xffffff,1.3,.15,null,{shrink:-2});q.dead=true;scene.remove(q.mesh)}else{q.pos.addScaledVector(v.normalize(),q.speed*dt);q._t=(q._t||0)+dt;if(q._t>.03){q._t=0;fxSprite(q.pos.clone(),q.color||0xffffff,.5,.26,null,{shrink:2.6})}}}game.shots=game.shots.filter(q=>!q.dead);
