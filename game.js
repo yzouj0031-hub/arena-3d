@@ -73,7 +73,7 @@ function setAnim(h,n,once=false){if(h.anim===n)return;let next=h.clips[n]||h.cli
 function hurt(src,t,n){if(!t||t.dead)return;n*=t.shield>0?.58:1;if(t.armor)n*=(1-Math.min(.5,t.armor));t.hp-=n;updateBar(t);floatText(t.pos,'-'+Math.round(n),0xff6680);pulse(t.pos,src?.team?0xff405f:0x3fd8ff,.8);if(t.kind==='hero')flashModel(t);if(src?.kind==='hero'&&src.lifesteal)heal(src,n*src.lifesteal);if(t.hp<=0)kill(src,t)}
 function heal(t,n){t.hp=Math.min(t.maxHp,t.hp+n);updateBar(t);floatText(t.pos,'+'+Math.round(n),0x65ff96);pulse(t.pos,0x59ff91,.65)}
 function kill(src,t){t.hp=0;t.dead=true;updateBar(t);
- if(t.kind==='hero'){burst(t.pos,t.team?0xff5473:0x46d2ff);shake(.45);hitstop(.09);t.deaths++;t.respawn=7;t.root.visible=false;setAnim(t,'die',true);if(src?.kind==='hero'){src.kills++;src.xp+=100;gold(src,300);src.team?game.redKills++:game.blueKills++;feed(`${src.def.name} 击败 ${t.def.name}`,src.team?0xff6883:0x64ddff);levelCheck(src)}}
+ if(t.kind==='hero'){burst(t.pos,t.team?0xff5473:0x46d2ff);shake(.45);hitstop(.09);t.deaths++;t.respawn=Math.min(42,8+(t.level||1)*2.2+game.time/60*1.6);t.root.visible=false;setAnim(t,'die',true);if(src?.kind==='hero'){src.kills++;src.xp+=100;gold(src,300);src.team?game.redKills++:game.blueKills++;feed(`${src.def.name} 击败 ${t.def.name}`,src.team?0xff6883:0x64ddff);levelCheck(src)}}
  else{t.root.visible=false;
   if(t.kind==='minion'){pulse(t.pos,t.team?0xff5874:0x50d6ff,1.1);if(src?.kind==='hero'){gold(src,38);src.xp+=25;levelCheck(src);if(src.player)floatText(t.pos,'+38',0xffd45c)}}
   if(t.kind==='tower'){burst(t.pos,0xffd36b);ring(t.pos,0xffd36b,5.5);scorch(t.pos,3.2);shake(.9);hitstop(.12);if(src?.kind==='hero')gold(src,150);feed(`${t.team?'赤渊':'苍穹'}防御塔已经倒塌！`,0xffd36b)}
@@ -85,7 +85,7 @@ function pickTarget(h,mode){
  if(mode==='tower'){return inRange.filter(e=>e.kind==='tower'||e.kind==='core').sort((a,b)=>h.pos.distanceTo(a.pos)-h.pos.distanceTo(b.pos))[0]||null}
  const ms=inRange.filter(e=>e.kind==='minion');if(!ms.length)return null;
  const killable=ms.filter(e=>e.hp<=h.atk);return (killable.length?killable:ms).sort((a,b)=>a.hp-b.hp)[0]}
-function basic(h,mode){if(!h||h.dead||h.cd[3]>0)return;let t=pickTarget(h,mode);
+function basic(h,mode,forced){if(!h||h.dead||h.cd[3]>0)return;let t=forced||pickTarget(h,mode);
  if(!t){if(h.player&&mode)feed(mode==='tower'?'射程内没有防御塔':'射程内没有小兵',0xffab6a);return}
  let d=h.pos.distanceTo(t.pos);if(d>h.range+1)return;h.cd[3]=.72;face(h,t);setAnim(h,h.range>3?'holding-right-shoot':'attack-melee-right',true);if(h.range>3)projectile(h,t,h.atk,h.def.color,18);else setTimeout(()=>{if(!t.dead&&h.pos.distanceTo(t.pos)<h.range+1.4)hurt(h,t,h.atk)},220)}
 function projectile(src,t,dmg,color,speed=20){let m=new THREE.Mesh(new THREE.SphereGeometry(.12,8,6),new THREE.MeshBasicMaterial({color:0xffffff}));m.add(glowSprite(color,1.15));m.position.copy(src.pos).add(new THREE.Vector3(0,1.2,0));scene.add(m);game.shots.push({mesh:m,pos:m.position,target:t,src,dmg,speed,color})}
@@ -115,8 +115,64 @@ function flashModel(h){if(!h.model)return;h.model.traverse(o=>{if(o.material&&o.
 
 function movePlayer(h,dt){let x=(keys.d?1:0)-(keys.a?1:0)+joy.x,z=(keys.s?1:0)-(keys.w?1:0)+joy.y,l=Math.hypot(x,z);if(l>.12){x/=l;z/=l;let sp=h.speed*(h.buff>0?1.3:1);h.pos.x=clamp(h.pos.x+x*sp*dt,-60,60);h.pos.z=clamp(h.pos.z+z*sp*dt,-29,29);h.root.rotation.y=Math.atan2(x,z);h.lastDir.set(x,0,z);setAnim(h,'sprint')}else setAnim(h,'idle')}
 function useUtility(type){if(!game||game.over||!game.player||game.player.dead||game.utility[type]>0)return;let p=game.player;if(type==='recall'){game.utility.recall=18;ring(p.pos,0x55cfff,3.3);trail(p.pos,0x7de6ff);p.pos.copy(p.spawn);p.hp=p.maxHp;p.mana=100;updateBar(p);feed(`${p.def.name} 已返回泉水`,0x7fe6ff)}else if(type==='heal'){game.utility.heal=14;heal(p,p.maxHp*.3);friends(p).filter(a=>a!==p&&a.pos.distanceTo(p.pos)<7).forEach(a=>heal(a,a.maxHp*.14));ring(p.pos,0x72ff91,4)}else if(type==='flash'){game.utility.flash=12;let from=p.pos.clone(),dir=p.lastDir.clone();if(dir.lengthSq()<.01)dir.set(1,0,0);p.pos.x=clamp(p.pos.x+dir.x*6.5,-60,60);p.pos.z=clamp(p.pos.z+dir.z*6.5,-29,29);trail(from,0xffd55c);trail(p.pos,0xffe58a)}}
-function aiHero(h,dt){let[t,d]=nearest(h);if(h.hp/h.maxHp<.27){let v=h.spawn.clone().sub(h.pos).setY(0);if(v.length()>1){v.normalize();h.pos.addScaledVector(v,h.speed*dt);h.root.rotation.y=Math.atan2(v.x,v.z);setAnim(h,'sprint')}if(d<5)cast(h,1);return}if(!t)return;if(d>h.range*.78){let v=t.pos.clone().sub(h.pos).setY(0).normalize();h.pos.addScaledVector(v,h.speed*dt*.74);h.root.rotation.y=Math.atan2(v.x,v.z);setAnim(h,'walk')}else{setAnim(h,'idle');basic(h)}if(d<h.range*1.35&&Math.random()<dt*.38)cast(h,Math.random()<.16?2:(Math.random()<.55?0:1))}
-function update(dt){game.time+=dt;game.wave-=dt;for(const k in game.utility)game.utility[k]=Math.max(0,game.utility[k]-dt);if(game.wave<=0){spawnWave();game.wave=12}aiShop(dt);for(const h of game.heroes){h.mixer.update(dt);for(let i=0;i<4;i++)h.cd[i]=Math.max(0,h.cd[i]-dt);h.shield=Math.max(0,h.shield-dt);h.buff=Math.max(0,h.buff-dt);h.invis=Math.max(0,h.invis-dt);h.mana=Math.min(100,h.mana+7*dt);h.goldT+=dt;if(h.goldT>=1){h.goldT-=1;h.gold+=2;if(h.player)updateGold()}if(h.invis<=0&&h.model.children.length&&h.root.visible&&!h._opaque){h.root.traverse(o=>{if(o.material){o.material.opacity=1;o.material.transparent=false}});h._opaque=true}if(h.dead){h.respawn-=dt;if(h.respawn<=0){h.dead=false;h.hp=h.maxHp;h.mana=100;h.pos.copy(h.spawn);h.root.visible=true;h._opaque=false;setAnim(h,'idle');updateBar(h)}continue}h.player?movePlayer(h,dt):aiHero(h,dt)}
+function step(h,dir,dt,rate=1){let v=dir.clone().setY(0);if(v.lengthSq()<1e-4)return;v.normalize();let sp=h.speed*(h.buff>0?1.25:1)*rate;h.pos.x=clamp(h.pos.x+v.x*sp*dt,-60,60);h.pos.z=clamp(h.pos.z+v.z*sp*dt,-29,29);h.root.rotation.y=Math.atan2(v.x,v.z);h.lastDir.copy(v);setAnim(h,rate>.85?'sprint':'walk')}
+function towerThreat(h,pos){return game.structures.find(s=>!s.dead&&s.team!==h.team&&s.pos.distanceTo(pos)<s.range+1.5)}
+function aiHero(h,dt){
+ const es=enemies(h).filter(e=>!e.dead),hpr=h.hp/h.maxHp;
+ const eh=es.filter(e=>e.kind==='hero'&&e.invis<=0),em=es.filter(e=>e.kind==='minion'),et=es.filter(e=>e.kind==='tower'||e.kind==='core');
+ const mates=friends(h).filter(a=>a!==h),myMinions=game.minions.filter(m=>!m.dead&&m.team===h.team);
+
+ /* —— 撤退与回泉:低血回家,补满再战 —— */
+ if(hpr<.32)h.retreat=true;
+ if(h.retreat){
+  if(hpr>.86){h.retreat=false}
+  else{
+   const near=eh.filter(e=>e.pos.distanceTo(h.pos)<h.range+4);
+   if(near.length&&h.cd[1]<=0&&h.mana>=22)cast(h,1);               // 追杀时交保命/位移技能
+   if(near.length&&h.cd[3]<=0&&near[0].pos.distanceTo(h.pos)<=h.range+1)basic(h,null,near[0]);
+   step(h,h.spawn.clone().sub(h.pos),dt,1);
+   if(h.pos.distanceTo(h.spawn)<2)setAnim(h,'idle');
+   return}}
+
+ /* —— 目标优先级:可击杀英雄 > 附近英雄 > 小兵(补刀推线) > 防御塔 —— */
+ let t=null,intent='';
+ const reach=h.range+5.5;
+ const hurtHeroes=eh.filter(e=>e.pos.distanceTo(h.pos)<reach+3).sort((a,b)=>a.hp/a.maxHp-b.hp/b.maxHp);
+ const finisher=hurtHeroes.find(e=>e.hp<=h.atk*2.4);
+ if(finisher){t=finisher;intent='chase'}
+ else if(hurtHeroes.length&&hurtHeroes[0].pos.distanceTo(h.pos)<reach){t=hurtHeroes[0];intent='fight'}
+ else{
+  const lastHit=em.filter(e=>e.pos.distanceTo(h.pos)<h.range+3&&e.hp<=h.atk).sort((a,b)=>a.hp-b.hp)[0];
+  if(lastHit){t=lastHit;intent='farm'}
+  else if(em.length){t=em.sort((a,b)=>h.pos.distanceTo(a.pos)-h.pos.distanceTo(b.pos))[0];intent='farm'}
+  else if(et.length){t=et.sort((a,b)=>h.pos.distanceTo(a.pos)-h.pos.distanceTo(b.pos))[0];intent='push'}}
+ if(!t){step(h,new THREE.Vector3(h.team?-1:1,0,-h.pos.z*.05),dt,.7);return}
+
+ const d=h.pos.distanceTo(t.pos),melee=h.range<3.2;
+
+ /* —— 塔下不送:没有己方小兵顶塔时,不进入敌方塔范围 —— */
+ const threat=towerThreat(h,t.pos);
+ if(threat&&intent!=='push'&&!myMinions.some(m=>m.pos.distanceTo(threat.pos)<threat.range)){
+  if(h.pos.distanceTo(threat.pos)<threat.range+2){step(h,h.pos.clone().sub(threat.pos),dt,1);return}}
+ if(intent==='push'&&myMinions.filter(m=>m.pos.distanceTo(t.pos)<12).length===0&&hpr<.9){
+  step(h,h.spawn.clone().sub(h.pos),dt,.8);return}                  // 无兵线不强推
+
+ /* —— 走位:远程放风筝,近战贴脸 —— */
+ const ideal=melee?1.8:h.range*.82;
+ if(d>ideal+.6)step(h,t.pos.clone().sub(h.pos),dt,intent==='chase'?1:.85);
+ else if(!melee&&d<h.range*.45&&t.kind==='hero'){step(h,h.pos.clone().sub(t.pos),dt,.9);face(h,t)}
+ else{setAnim(h,'idle');face(h,t)}
+
+ /* —— 出手:普攻优先补刀,技能按价值释放 —— */
+ if(d<=h.range+1)basic(h,null,t);
+ if(t.kind!=='hero')return;
+ const cluster=eh.filter(e=>e.pos.distanceTo(t.pos)<6).length;
+ if(d<h.range+3){
+  if(h.cd[2]<=0&&h.mana>=40&&(cluster>=2||t.hp/t.maxHp<.5))cast(h,2);      // 大招:多人或残血
+  else if(h.cd[0]<=0&&h.mana>=22)cast(h,0);                                // 一技能:主力输出
+  else if(h.cd[1]<=0&&h.mana>=22&&(h.id===1||h.id===4||hpr<.6||cluster>=2))cast(h,1);}
+ if(h.id===4&&h.cd[1]<=0&&h.mana>=22&&mates.some(a=>a.hp/a.maxHp<.55&&a.pos.distanceTo(h.pos)<10))cast(h,1);}
+function update(dt){game.time+=dt;game.wave-=dt;for(const k in game.utility)game.utility[k]=Math.max(0,game.utility[k]-dt);if(game.wave<=0){spawnWave();game.wave=12}aiShop(dt);for(const h of game.heroes){h.mixer.update(dt);for(let i=0;i<4;i++)h.cd[i]=Math.max(0,h.cd[i]-dt);h.shield=Math.max(0,h.shield-dt);h.buff=Math.max(0,h.buff-dt);h.invis=Math.max(0,h.invis-dt);h.mana=Math.min(100,h.mana+7*dt);if(h.pos.distanceTo(h.spawn)<7.5&&h.hp<h.maxHp){h.hp=Math.min(h.maxHp,h.hp+h.maxHp*.22*dt);h.mana=100;updateBar(h)}h.goldT+=dt;if(h.goldT>=1){h.goldT-=1;h.gold+=2;if(h.player)updateGold()}if(h.invis<=0&&h.model.children.length&&h.root.visible&&!h._opaque){h.root.traverse(o=>{if(o.material){o.material.opacity=1;o.material.transparent=false}});h._opaque=true}if(h.dead){h.respawn-=dt;if(h.respawn<=0){h.dead=false;h.hp=h.maxHp;h.mana=100;h.pos.copy(h.spawn);h.root.visible=true;h._opaque=false;setAnim(h,'idle');updateBar(h)}continue}h.player?movePlayer(h,dt):aiHero(h,dt)}
  for(const m of game.minions){if(m.dead)continue;m.cd-=dt;if(m.gear){m.walk+=dt*9;m.gear.position.y=Math.abs(Math.sin(m.walk))*.08;m.gear.rotation.z=Math.sin(m.walk)*.06}let[t,d]=nearest(m);if(t&&d<m.range){if(m.cd<=0){m.cd=1.05;m.range>2?minionShot(m,t):hurt(m,t,m.atk)}}else{m.pos.x+=(m.team?-1:1)*m.speed*dt;m.root.rotation.y=m.team?-Math.PI/2:Math.PI/2}}
  for(const s of game.structures){if(s.dead)continue;s.cd-=dt;if(s.root.userData.gem)s.root.userData.gem.rotation.y+=dt;let[t,d]=nearest(s,enemies(s).filter(e=>e.kind!=='tower'&&e.kind!=='core'));if(t&&d<s.range&&s.cd<=0){s.cd=1;projectile(s,t,s.atk,s.team?0xff4868:0x42d6ff,20)}}
  for(const q of game.shots){if(q.target.dead){q.dead=true;continue}let v=q.target.pos.clone().add(new THREE.Vector3(0,.8,0)).sub(q.pos),d=v.length();if(d<.45){hurt(q.src,q.target,q.dmg);fxSprite(q.pos.clone(),q.color||0xffffff,1.3,.15,null,{shrink:-2});q.dead=true;scene.remove(q.mesh)}else{q.pos.addScaledVector(v.normalize(),q.speed*dt);q._t=(q._t||0)+dt;if(q._t>.03){q._t=0;fxSprite(q.pos.clone(),q.color||0xffffff,.5,.26,null,{shrink:2.6})}}}game.shots=game.shots.filter(q=>!q.dead);
@@ -124,7 +180,7 @@ function update(dt){game.time+=dt;game.wave-=dt;for(const k in game.utility)game
  for(const e of game.effects){e.life-=dt;if(e.vel){e.mesh.position.addScaledVector(e.vel,dt);if(e.grav)e.vel.y+=e.grav*dt}if(e.vy)e.mesh.position.y+=e.vy*dt;if(e.grow)e.mesh.scale.multiplyScalar(1+e.grow*dt);if(e.shrink)e.mesh.scale.multiplyScalar(Math.max(.001,1-e.shrink*dt));if(e.mesh.material)e.mesh.material.opacity=(e.fadeFrom!==undefined?e.fadeFrom:1)*clamp(e.maxLife?e.life/e.maxLife:e.life*2,0,1);if(e.life<=0)scene.remove(e.mesh)}game.effects=game.effects.filter(e=>e.life>0);game.minions=game.minions.filter(m=>{if(m.dead||Math.abs(m.pos.x)>62){scene.remove(m.root);return false}return true});followCamera(dt);updateHUD()}
 function minionShot(m,t){projectile(m,t,m.atk,m.team?0xff5874:0x50d6ff,15)}
 function followCamera(dt){let p=game.player,desired=p.pos.clone().add(new THREE.Vector3(-8.2,14.5,12.6));camera.position.lerp(desired,1-Math.pow(.001,dt));if(game.shake>0){game.shake=Math.max(0,game.shake-dt*2.4);let sk=game.shake*.32;camera.position.x+=rand(-sk,sk);camera.position.y+=rand(-sk,sk);camera.position.z+=rand(-sk,sk)}camera.lookAt(p.pos.x+2.2,p.pos.y+.55,p.pos.z)}
-function updateHUD(){let p=game.player;$('#heroName').textContent=p.def.name+' · '+p.def.role;$('#level').textContent='  Lv.'+p.level;$('#hp').style.width=100*p.hp/p.maxHp+'%';$('#mp').style.width=p.mana+'%';$('#xp').style.width=100*p.xp/(p.level*120)+'%';$('#bk').textContent=game.blueKills;$('#rk').textContent=game.redKills;let s=Math.floor(game.time);$('#time').textContent=String(s/60|0).padStart(2,'0')+':'+String(s%60).padStart(2,'0');p.def.skills.forEach((n,i)=>$('#sk'+i).textContent=n);let _lh=document.querySelector('.skill.lasthit');if(_lh){let m=pickTarget(p,'lasthit');_lh.classList.toggle('ready',!!(m&&m.hp<=p.atk))}let _tw=document.querySelector('.skill.tower');if(_tw)_tw.classList.toggle('ready',!!pickTarget(p,'tower'));document.querySelectorAll('.skill').forEach(b=>{let s=b.dataset.s,cd=(s==='a'||s==='lh'||s==='tw')?p.cd[3]:p.cd[+s],o=b.querySelector('.cd');o.style.display=cd>0?'flex':'none';o.textContent=cd>0?cd.toFixed(cd<3?1:0):''});document.querySelectorAll('.util').forEach(b=>{let cd=game.utility[b.dataset.u],o=b.querySelector('.cd');o.style.display=cd>0?'flex':'none';o.textContent=cd>0?Math.ceil(cd):''});drawMap()}
+function updateHUD(){let p=game.player;let db=$('#deadBox');if(db){db.style.display=p.dead?'block':'none';if(p.dead)db.innerHTML='已阵亡<br><b>'+Math.ceil(p.respawn)+'</b><small>秒后复活</small>'}$('#heroName').textContent=p.def.name+' · '+p.def.role;$('#level').textContent='  Lv.'+p.level;$('#hp').style.width=100*p.hp/p.maxHp+'%';$('#mp').style.width=p.mana+'%';$('#xp').style.width=100*p.xp/(p.level*120)+'%';$('#bk').textContent=game.blueKills;$('#rk').textContent=game.redKills;let s=Math.floor(game.time);$('#time').textContent=String(s/60|0).padStart(2,'0')+':'+String(s%60).padStart(2,'0');p.def.skills.forEach((n,i)=>$('#sk'+i).textContent=n);let _lh=document.querySelector('.skill.lasthit');if(_lh){let m=pickTarget(p,'lasthit');_lh.classList.toggle('ready',!!(m&&m.hp<=p.atk))}let _tw=document.querySelector('.skill.tower');if(_tw)_tw.classList.toggle('ready',!!pickTarget(p,'tower'));document.querySelectorAll('.skill').forEach(b=>{let s=b.dataset.s,cd=(s==='a'||s==='lh'||s==='tw')?p.cd[3]:p.cd[+s],o=b.querySelector('.cd');o.style.display=cd>0?'flex':'none';o.textContent=cd>0?cd.toFixed(cd<3?1:0):''});document.querySelectorAll('.util').forEach(b=>{let cd=game.utility[b.dataset.u],o=b.querySelector('.cd');o.style.display=cd>0?'flex':'none';o.textContent=cd>0?Math.ceil(cd):''});drawMap()}
 function drawMap(){let c=$('#map'),x=c.getContext('2d'),w=c.width=c.clientWidth*2,h=c.height=c.clientHeight*2;x.clearRect(0,0,w,h);x.fillStyle='#163726';x.fillRect(0,0,w,h);x.fillStyle='#5e6267';x.fillRect(0,h*.39,w,h*.22);x.fillStyle='#1c6980';x.fillRect(w*.475,0,w*.05,h);for(const e of all()){if(e.dead)continue;x.fillStyle=e.team?'#ff536f':'#4bd8ff';let px=(e.pos.x+65)/130*w,pz=(e.pos.z+33)/66*h,r=e.kind==='hero'?5:e.kind==='core'?6:3;x.beginPath();x.arc(px,pz,r,0,7);x.fill()}}
 function floatText(pos,text,color){let v=pos.clone().add(new THREE.Vector3(0,2.5,0)).project(camera),d=document.createElement('div');d.className='damage';d.style.color='#'+color.toString(16).padStart(6,'0');d.style.left=(v.x*.5+.5)*innerWidth+'px';d.style.top=(-v.y*.5+.5)*innerHeight+'px';d.textContent=text;document.body.appendChild(d);setTimeout(()=>d.remove(),760)}
 function feed(text,color=0xffffff){let d=document.createElement('div');d.className='feed';d.style.color='#'+color.toString(16).padStart(6,'0');d.textContent=text;$('#feed').prepend(d);setTimeout(()=>d.remove(),5200)}
@@ -156,6 +212,8 @@ function initShopUI(){if($('#shopPanel'))return;
 .skill.lasthit{border-color:#ffd45c;background:radial-gradient(circle at 36% 27%,#8a6a1e,#241a05 72%);font-size:17px}
 .skill.tower{border-color:#9ad0ff;background:radial-gradient(circle at 36% 27%,#2a5f8a,#0a1c2c 72%);font-size:17px}
 .skill.ready{box-shadow:0 0 16px #ffd45ccc,inset 0 0 12px #ffd45c66;filter:brightness(1.25)}
+#deadBox{position:fixed;top:38%;left:50%;transform:translateX(-50%);background:rgba(10,4,8,.82);border:1px solid rgba(255,90,120,.45);color:#ff9fb2;padding:14px 30px;border-radius:12px;font:600 15px/1.5 sans-serif;text-align:center;z-index:35;display:none;pointer-events:none}
+#deadBox b{display:block;font-size:38px;color:#fff;line-height:1.1}#deadBox small{font-size:11px;color:#c98a99}
 #goldBox{position:fixed;top:64px;right:12px;background:rgba(8,16,24,.8);border:1px solid rgba(255,212,92,.4);color:#ffd45c;padding:6px 12px;border-radius:20px;font:600 14px/1 sans-serif;z-index:30}
 #shopBtn{position:fixed;top:102px;right:12px;width:44px;height:44px;border-radius:50%;border:1px solid rgba(255,212,92,.5);background:rgba(8,16,24,.85);font-size:20px;z-index:30;color:#ffd45c;cursor:pointer}
 #shopPanel{position:fixed;inset:0;margin:auto;width:min(92vw,420px);height:fit-content;max-height:78vh;overflow:auto;background:rgba(7,14,22,.96);border:1px solid rgba(255,212,92,.35);border-radius:14px;padding:16px;z-index:40;display:none;color:#dfe9f2;font-family:sans-serif}
@@ -167,7 +225,7 @@ function initShopUI(){if($('#shopPanel'))return;
 .shopItem .ico{font-size:22px}.shopItem .inf{flex:1;display:flex;flex-direction:column;gap:2px}.shopItem .inf i{font-style:normal;font-size:11px;color:#8fa4b8}
 .shopItem em{font-style:normal;color:#ffd45c;font-weight:700;font-size:13px}
 .shopItem.owned{opacity:.45}.shopItem.owned em{color:#7fca7f}.shopItem.owned em::after{content:" ✓"}`;document.head.appendChild(st);
- let gb=document.createElement('div');gb.id='goldBox';gb.innerHTML='🪙 <b id="goldNum">0</b>';document.body.appendChild(gb);
+ let dbx=document.createElement('div');dbx.id='deadBox';document.body.appendChild(dbx);let gb=document.createElement('div');gb.id='goldBox';gb.innerHTML='🪙 <b id="goldNum">0</b>';document.body.appendChild(gb);
  let btn=document.createElement('button');btn.id='shopBtn';btn.textContent='🛒';btn.addEventListener('pointerdown',e=>{e.preventDefault();toggleShop()});document.body.appendChild(btn);
  let panel=document.createElement('div');panel.id='shopPanel';panel.innerHTML='<h3>⚖️ 军备商店 <small>补刀+38 · 击杀+300 · 每秒+2 (电脑按B开关)</small><button id="shopClose">✕</button></h3><div id="shopItems"></div>';document.body.appendChild(panel);
  panel.querySelector('#shopClose').addEventListener('click',toggleShop);
