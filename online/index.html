@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+  <meta name="theme-color" content="#06101c">
+  <title>诸界争锋 · 跨设备联机测试</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <main id="lobby" class="screen">
+    <section class="lobby-card">
+      <header>
+        <span class="eyebrow">SUPABASE REALTIME · 3V3 NETWORK LAB</span>
+        <h1>跨设备联机测试场</h1>
+        <p>不同手机、平板或电脑使用同一房间码，即可进入同一个实时房间。</p>
+      </header>
+
+      <div class="identity-row">
+        <label>你的名字<input id="playerName" maxlength="12" autocomplete="nickname" placeholder="玩家"></label>
+        <label>房间码<input id="roomCode" maxlength="6" inputmode="text" autocomplete="off" placeholder="例如 A8K2QF"></label>
+        <button id="createRoom" class="primary">创建房间</button>
+        <button id="joinRoom">加入房间</button>
+      </div>
+
+      <div class="connection-line">
+        <span id="connectionDot" class="dot"></span>
+        <strong id="connectionText">尚未连接</strong>
+        <button id="copyRoom" class="text-button" disabled>复制房间码</button>
+      </div>
+
+      <section class="hero-picker">
+        <h2>选择英雄</h2>
+        <div id="heroList" class="hero-list"></div>
+      </section>
+
+      <section class="room-section">
+        <div class="room-heading">
+          <h2>房间成员 <span id="memberCount">0/6</span></h2>
+          <span id="roomHint">创建或加入房间后显示</span>
+        </div>
+        <div id="roster" class="roster"></div>
+      </section>
+
+      <div class="lobby-actions">
+        <button id="readyButton" class="ready" disabled>准备</button>
+        <button id="startButton" class="primary" disabled>由房主开始</button>
+      </div>
+      <p class="notice">这是第一阶段联机测试：房间、六人状态、移动与攻击动作会跨设备同步；伤害、技能和胜负判定将在下一阶段接入权威对局逻辑。</p>
+    </section>
+  </main>
+
+  <section id="arena" class="screen hidden" aria-label="联机测试战场">
+    <div id="renderHost"></div>
+    <div class="match-hud">
+      <div class="match-info"><b id="matchRoom">房间 ------</b><span id="teamName">苍穹队</span><small><i class="dot online"></i> Supabase Realtime</small></div>
+      <div id="networkInfo" class="network-info">连接中</div>
+      <button id="leaveMatch" class="leave">退出</button>
+    </div>
+    <div id="memberStrip" class="member-strip"></div>
+    <div id="eventFeed" class="event-feed"></div>
+    <div id="joystick" class="joystick"><div id="knob" class="knob"></div></div>
+    <button id="attackButton" class="attack-button"><span>⚔</span><b>攻击</b></button>
+    <div class="keyboard-tip">WASD / 方向键移动 · 空格攻击 · 拖动画面旋转视角</div>
+  </section>
+
+  <div id="toast" role="status" aria-live="polite"></div>
+  <div id="rotateHint">请将设备横过来<br><small>联机战场需要横屏</small></div>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
