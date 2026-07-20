@@ -22,28 +22,30 @@
 
     <header class="topbar">
       <div>
-        <p class="eyebrow">ARENA 3D · AI-GENERATED HERO / V6</p>
-        <h1>黄金女武神 · 玛丽亚</h1>
-        <p class="subtitle">生成式建模 → 转 GLB → 接入引擎 · 带骨骼动画</p>
+        <p class="eyebrow">ARENA 3D · IMPORTED HEROES / V6</p>
+        <h1>外部模型接入</h1>
+        <p class="subtitle">FBX 生成模型 → 转 GLB → 接入引擎 · 带骨骼动画</p>
       </div>
       <div class="quality-badge"><span></span> 65 骨骼 · 待机战斗动作</div>
     </header>
 
     <section class="hero-card" aria-label="模型说明">
-      <div class="role-mark">剑士</div>
+      <div class="role-mark" id="heroRole">剑士</div>
       <p class="hero-kicker">MOBA HERO · IMPORTED</p>
-      <h2>黄金女武神 · 玛丽亚</h2>
-      <p>外部生成的角色模型经 FBX→GLB 转换、贴图压缩优化后接入项目管线，保留全套骨骼与「待机→战斗待机」动作，直接由引擎实时驱动。</p>
+      <h2 id="heroName">黄金女武神 · 玛丽亚</h2>
+      <p id="heroDesc">外部生成的角色模型经 FBX→GLB 转换、贴图压缩优化后接入项目管线，保留全套骨骼与「待机→战斗待机」动作，直接由引擎实时驱动。</p>
       <div class="stats">
-        <span>约 1.46 万面</span>
-        <span>65 根骨骼</span>
-        <span>1.0 MB（压缩后）</span>
+        <span>Mixamo 骨骼</span>
+        <span>FBX→GLB→WebP</span>
+        <span>引擎实时驱动</span>
       </div>
     </section>
 
     <div class="gesture-hint">单指旋转 · 双指缩放 · 滚轮拉近</div>
 
     <nav class="action-bar" aria-label="操作">
+      <button class="model-btn active" data-key="valkyrie"><i>⚔</i><span>女武神</span></button>
+      <button class="model-btn" data-key="casual"><i>🚶</i><span>旅者</span></button>
       <button class="action active" id="spin"><i>⟳</i><span>自动旋转</span></button>
     </nav>
 

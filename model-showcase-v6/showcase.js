@@ -10,8 +10,16 @@ const errorMessage = document.querySelector('#error-message');
 let renderer, scene, camera, clock, mixer, model;
 let autoSpin = true;
 
+const MODELS = {
+  valkyrie: { url: './assets/valkyrie.glb', name: '黄金女武神 · 玛丽亚', role: '剑士', desc: '奇幻黑金重甲剑士，携巨剑与飘逸金发，保留「待机→战斗待机」动作。' },
+  casual: { url: './assets/casual.glb', name: '街头旅者 · 杰克', role: '平民', desc: '现代休闲装角色，V 领短袖与工装短裤，同一套 Mixamo 骨骼与待机动作。' },
+};
+let currentKey = 'valkyrie';
+
 // 轻量轨道控制（拖拽/缩放），零外部依赖
 const orbit = { yaw: 0.5, pitch: 0.1, dist: 3.2, targetY: 0.95, minDist: 1.6, maxDist: 6, minPitch: -0.3, maxPitch: 0.75 };
+
+const loader = new GLTFLoader();
 
 boot().catch(showError);
 
@@ -19,44 +27,74 @@ async function boot() {
   initScene();
   addStudio();
   bindControls();
+  await loadModel(currentKey);
+  requestAnimationFrame(() => loading.classList.add('ready'));
+  animate();
+}
 
-  const loader = new GLTFLoader();
+function disposeModel() {
+  if (!model) return;
+  scene.remove(model);
+  model.traverse((o) => {
+    if (o.isMesh) {
+      o.geometry?.dispose();
+      const mats = Array.isArray(o.material) ? o.material : [o.material];
+      mats.forEach((m) => { for (const k in m) { const v = m[k]; if (v && v.isTexture) v.dispose(); } m.dispose?.(); });
+    }
+  });
+  mixer?.stopAllAction();
+  mixer = null;
+  model = null;
+}
+
+async function loadModel(key) {
+  const def = MODELS[key];
+  loading.classList.remove('ready');
+  loadingDetail.textContent = '读取模型与贴图';
+
   const gltf = await new Promise((res, rej) => loader.load(
-    './assets/hero.glb',
-    res,
+    def.url, res,
     (e) => { if (e.total) loadingDetail.textContent = `模型与贴图 ${Math.round(e.loaded / e.total * 100)}%`; },
     rej,
   ));
 
+  disposeModel();
   model = gltf.scene;
   model.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; o.frustumCulled = false; } });
 
-  // 落地 + 居中（用 T 帧的包围盒把脚放到地面）
-  const box = new THREE.Box3().setFromObject(model);
+  // 落地 + 居中
+  let box = new THREE.Box3().setFromObject(model);
   const center = box.getCenter(new THREE.Vector3());
   model.position.x -= center.x;
   model.position.z -= center.z;
   model.position.y -= box.min.y;
   scene.add(model);
 
+  // 按包围盒自动取景（两个模型缩放不同也能正确构图）
+  box = new THREE.Box3().setFromObject(model);
   const size = box.getSize(new THREE.Vector3());
   orbit.targetY = size.y * 0.52;
   orbit.dist = size.y * 1.7;
   orbit.minDist = size.y * 0.9;
   orbit.maxDist = size.y * 3.2;
 
-  // 动画：待机→战斗待机，用 ping-pong 让过渡循环更顺
+  // 动画：待机→战斗待机，ping-pong 循环更顺
   if (gltf.animations.length) {
     mixer = new THREE.AnimationMixer(model);
     const action = mixer.clipAction(gltf.animations[0]);
     action.setLoop(THREE.LoopPingPong, Infinity);
-    action.clampWhenFinished = false;
-    action.timeScale = 0.55; // 放慢，更像从容的待机
+    action.timeScale = 0.55;
     action.play();
   }
 
+  // 更新说明卡
+  currentKey = key;
+  document.querySelector('#heroName').textContent = def.name;
+  document.querySelector('#heroRole').textContent = def.role;
+  document.querySelector('#heroDesc').textContent = def.desc;
+  document.querySelectorAll('.model-btn').forEach((b) => b.classList.toggle('active', b.dataset.key === key));
+
   requestAnimationFrame(() => loading.classList.add('ready'));
-  animate();
 }
 
 function initScene() {
@@ -155,6 +193,13 @@ function bindControls() {
   el.addEventListener('touchend', () => { pinch = 0; });
 
   document.querySelector('#spin')?.addEventListener('click', (e) => { autoSpin = !autoSpin; e.currentTarget.classList.toggle('active', autoSpin); });
+
+  document.querySelectorAll('.model-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      if (btn.dataset.key === currentKey) return;
+      loadModel(btn.dataset.key).catch(showError);
+    });
+  });
 }
 
 function updateCamera() {

@@ -135,3 +135,18 @@ body {
   padding: 10px 22px; border-radius: 10px; border: none; cursor: pointer;
   background: var(--cyan); color: #06121a; font-weight: 700;
 }
+
+.model-btn {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  min-width: 76px; padding: 10px 16px; border-radius: 14px; cursor: pointer;
+  background: rgba(18,26,38,0.72); border: 1px solid rgba(255,255,255,0.1);
+  color: #cfe0f2; font-size: 11px; letter-spacing: 1px;
+  backdrop-filter: blur(10px); transition: all 0.2s;
+}
+.model-btn i { font-size: 18px; font-style: normal; }
+.model-btn.active {
+  border-color: var(--gold); color: #fff;
+  box-shadow: 0 0 20px rgba(255,179,71,0.35);
+  background: rgba(255,179,71,0.14);
+}
+.model-btn:active { transform: scale(0.95); }
