@@ -36,7 +36,7 @@ function selectHeroPreview(id){selectedHero=id;document.querySelectorAll('.card'
 function previewLoop(now){if(!preview?.active)return;let dt=Math.min(.05,(now-preview.last)/1000);preview.last=now;preview.mixer?.update(dt);preview.root.rotation.y+=dt*.18;preview.renderer.render(preview.scene,preview.camera);requestAnimationFrame(previewLoop)}
 function stopHeroPreview(){if(!preview)return;preview.active=false;preview.observer.disconnect();preview.mixer?.stopAllAction();preview.renderer.dispose();preview.renderer.domElement.remove();preview=null}
 
-function start(pick){stopHeroPreview();$('#select').classList.add('hidden');$('#hud').classList.remove('hidden');buildWorld();const rest=[0,1,2,3,4,5].filter(i=>i!==pick),order=[pick,...rest];game={time:0,last:performance.now(),heroes:[],minions:[],shots:[],zones:[],structures:[],effects:[],blueKills:0,redKills:0,wave:1,over:false,player:null,utility:{recall:0,heal:0,flash:0}};order.slice(0,3).forEach((id,i)=>spawnHero(id,0,new THREE.Vector3(-48+i*1.8,0,-5+i*5),i===0));order.slice(3).forEach((id,i)=>spawnHero(id,1,new THREE.Vector3(48-i*1.8,0,-5+i*5)));spawnStructures();buildTeamStrip();initShopUI();updateGold();document.querySelectorAll('.shopItem').forEach(b=>b.classList.remove('owned'));feed('战斗开始：摧毁敌方诸界核心！',0xffdc80);clock.start();requestAnimationFrame(loop)}
+function start(pick){stopHeroPreview();$('#select').classList.add('hidden');$('#hud').classList.remove('hidden');buildWorld();const rest=[0,1,2,3,4,5].filter(i=>i!==pick),order=[pick,...rest];game={time:0,last:performance.now(),heroes:[],minions:[],shots:[],zones:[],structures:[],effects:[],blueKills:0,redKills:0,wave:1,over:false,player:null,utility:{recall:0,heal:0,flash:0}};order.slice(0,3).forEach((id,i)=>spawnHero(id,0,new THREE.Vector3(-48+i*1.8,0,-5+i*5),i===0));order.slice(3).forEach((id,i)=>spawnHero(id,1,new THREE.Vector3(48-i*1.8,0,-5+i*5)));spawnStructures();spawnBushes();buildTeamStrip();initShopUI();updateGold();document.querySelectorAll('.shopItem').forEach(b=>b.classList.remove('owned'));feed('战斗开始：摧毁敌方诸界核心！',0xffdc80);clock.start();requestAnimationFrame(loop)}
 function buildTeamStrip(){let box=$('#teamStrip');box.innerHTML='';for(const h of game.heroes){let face=document.createElement('div');face.className='team-face'+(h.team?' enemy':'');face.textContent=h.def.icon;face.title=`${h.team?'赤渊':'苍穹'} · ${h.def.name}`;box.appendChild(face)}}
 function buildWorld(){scene.clear();mixers.length=0;scene.background=new THREE.Color(0x0a1923);scene.fog=new THREE.FogExp2(0x0f232c,.011);scene.add(new THREE.HemisphereLight(0x9cc8f2,0x1c2810,1.1));let sun=new THREE.DirectionalLight(0xffdca8,2.6);sun.position.set(-25,48,18);sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);sun.shadow.camera.left=-70;sun.shadow.camera.right=70;sun.shadow.camera.top=45;sun.shadow.camera.bottom=-45;scene.add(sun);
  const tex=new THREE.CanvasTexture(makeGroundTexture());tex.wrapS=tex.wrapT=THREE.RepeatWrapping;tex.repeat.set(14,7);ground=new THREE.Mesh(new THREE.PlaneGeometry(130,66),new THREE.MeshStandardMaterial({map:tex,roughness:.95,metalness:.02}));ground.rotation.x=-Math.PI/2;ground.receiveShadow=true;scene.add(ground);let laneTex=stoneTexture().clone();laneTex.needsUpdate=true;laneTex.repeat.set(20,2.6);let lane=new THREE.Mesh(new THREE.PlaneGeometry(120,16),new THREE.MeshStandardMaterial({map:laneTex,color:0x757c85,roughness:.92}));lane.rotation.x=-Math.PI/2;lane.position.y=.015;lane.receiveShadow=true;scene.add(lane);for(let x=-52;x<=52;x+=8){let slab=new THREE.Mesh(new THREE.BoxGeometry(5.6,.12,11),new THREE.MeshStandardMaterial({map:stoneTexture(),color:x%16?0x676e77:0x7a828c,roughness:.88}));slab.position.set(x,.08,0);slab.receiveShadow=true;scene.add(slab)}
@@ -57,6 +57,56 @@ function addHeroGear(root,id,team,player=false){const mat=new THREE.MeshStandard
 function makeBar(e){let c=document.createElement('canvas');c.width=192;c.height=48;let tex=new THREE.CanvasTexture(c),spr=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,depthTest:false}));spr.scale.set(e.kind==='hero'?3.25:2.15,e.kind==='hero'?.82:.54,1);spr.position.y=e.kind==='hero'?3.15:1.35;e.root.add(spr);e.bar={c,ctx:c.getContext('2d'),tex,spr};updateBar(e)}
 function updateBar(e){if(!e.bar)return;let x=e.bar.ctx;x.clearRect(0,0,192,48);if(e.kind==='hero'){x.font='bold 15px sans-serif';x.textAlign='center';x.fillStyle='#fff';x.shadowColor='#000';x.shadowBlur=4;x.fillText(`Lv.${e.level||1}  ${e.def?.name||''}`,96,15);x.shadowBlur=0}x.fillStyle='#160711';x.fillRect(10,22,172,14);x.fillStyle=e.team?'#ff5473':'#46d2ff';x.fillRect(10,22,172*clamp(e.hp/e.maxHp,0,1),14);x.strokeStyle='#fff9';x.lineWidth=2;x.strokeRect(10,22,172,14);e.bar.tex.needsUpdate=true}
 
+/* ===== 草丛与视野 ===== */
+let bushObjs=[];
+function spawnBushes(){
+ bushObjs.forEach(o=>scene.remove(o));bushObjs=[];
+ const spots=[[-30,-11],[-30,11],[-16,-12.5],[-16,12.5],[-6,-13],[6,13],[16,-12.5],[16,12.5],[30,-11],[30,11]];
+ game.bushes=[];
+ for(const [x,z] of spots){
+  const r=4.3,pos=new THREE.Vector3(x,0,z),g=new THREE.Group();
+  const base=new THREE.Mesh(new THREE.CircleGeometry(r,30),new THREE.MeshStandardMaterial({color:0x10331b,roughness:1}));
+  base.rotation.x=-Math.PI/2;base.position.y=.07;base.receiveShadow=true;g.add(base);
+  const mat=new THREE.MeshStandardMaterial({color:0x1f5f2e,roughness:.92,transparent:true,opacity:.96});
+  for(let i=0;i<24;i++){
+   const a=Math.random()*6.283,rr=Math.sqrt(Math.random())*r*.9,hgt=rand(1.6,2.7);
+   const bl=new THREE.Mesh(new THREE.ConeGeometry(rand(.34,.66),hgt,5),mat);
+   bl.position.set(Math.cos(a)*rr,hgt/2,Math.sin(a)*rr);
+   bl.rotation.z=rand(-.16,.16);bl.castShadow=true;g.add(bl);
+  }
+  g.position.copy(pos);scene.add(g);bushObjs.push(g);
+  game.bushes.push({pos,r,mat});
+ }
+}
+function bushAt(pos){if(!game||!game.bushes)return null;for(const b of game.bushes)if(b.pos.distanceTo(pos)<b.r)return b;return null}
+/* 可见性:草丛里的单位对外隐形,除非同处一丛、贴脸、或刚出手暴露 */
+function canSee(obs,t){
+ if(!obs||!t)return true;
+ if(t.kind!=='hero'&&t.kind!=='minion')return true;   // 建筑永远可见
+ if(!t._bush)return true;                              // 不在草里
+ if(t._reveal>0)return true;                           // 出手暴露中
+ if(obs._bush===t._bush)return true;                   // 同一片草丛
+ return obs.pos.distanceTo(t.pos)<2.5;                 // 贴脸能发现
+}
+function reveal(u){if(u&&(u.kind==='hero'||u.kind==='minion'))u._reveal=1.2}
+function updateVision(dt){
+ if(!game.bushes||!game.player)return;
+ const p=game.player,units=[...game.heroes,...game.minions];
+ for(const e of units){
+  if(e._reveal>0)e._reveal-=dt;
+  e._bush=e.dead?null:bushAt(e.pos);
+ }
+ for(const e of units){
+  if(e.dead)continue;
+  if(e.root)e.root.visible=(e.team===p.team)||canSee(p,e);
+ }
+ const hid=!p.dead&&!!p._bush;
+ for(const b of game.bushes){
+  const t=(!p.dead&&b===p._bush)?.32:.96;                // 自己进草丛时草变透明,便于观察
+  b.mat.opacity+=(t-b.mat.opacity)*Math.min(1,dt*9);
+ }
+ const el=$('#hideTag');if(el)el.style.display=hid?'block':'none';
+}
 function spawnStructures(){for(const team of[0,1]){let sx=team?55:-55,tx=team?35:-35;game.structures.push(makeStructure(team,'core',sx,0),makeStructure(team,'tower',tx,0))}}
 function makeStructure(team,kind,x,z){let root=new THREE.Group(),c=team?0xff365e:0x31caff,dark=team?0x3a1220:0x0e2c3e,st=stoneTexture();
  if(kind==='tower'){let t1=new THREE.Mesh(new THREE.CylinderGeometry(2.3,2.9,.8,10),new THREE.MeshStandardMaterial({map:st,color:0xa8afb8,roughness:.85}));t1.position.y=.4;let t2=new THREE.Mesh(new THREE.CylinderGeometry(1.35,1.75,3.4,10),new THREE.MeshStandardMaterial({map:st,color:0x99a1ab,roughness:.85}));t2.position.y=2.4;let band=new THREE.Mesh(new THREE.TorusGeometry(1.6,.14,8,20),new THREE.MeshStandardMaterial({color:dark,metalness:.6,roughness:.4}));band.rotation.x=Math.PI/2;band.position.y=1.15;let top=new THREE.Mesh(new THREE.CylinderGeometry(1.9,1.5,.55,10),new THREE.MeshStandardMaterial({map:st,color:0xb2bac4,roughness:.8}));top.position.y=4.35;[t1,t2,band,top].forEach(m=>{m.castShadow=true;m.receiveShadow=true;root.add(m)});for(let i=0;i<8;i++){let cr=new THREE.Mesh(new THREE.BoxGeometry(.42,.5,.42),new THREE.MeshStandardMaterial({map:st,color:0xa5adb7}));cr.position.set(Math.cos(i/8*6.283)*1.62,4.85,Math.sin(i/8*6.283)*1.62);cr.castShadow=true;root.add(cr)}let gem=new THREE.Mesh(new THREE.OctahedronGeometry(.62),new THREE.MeshStandardMaterial({color:c,emissive:c,emissiveIntensity:2.2}));gem.position.y=5.65;root.add(gem);root.userData.gem=gem;let gl=glowSprite(c,3.2);gl.position.y=5.65;root.add(gl)}
@@ -74,7 +124,7 @@ function spawnMinion(team,i){let root=new THREE.Group(),gear=new THREE.Group(),t
  else{let bl=new THREE.Mesh(new THREE.BoxGeometry(.09,.85,.2),new THREE.MeshStandardMaterial({color:0xcfd6de,metalness:.85,roughness:.25}));bl.position.set(.44,1.05,.14);bl.rotation.z=.32;let hilt=new THREE.Mesh(new THREE.BoxGeometry(.26,.07,.07),new THREE.MeshStandardMaterial({color:0x8a6a30,metalness:.7}));hilt.position.set(.31,.72,.14);hilt.rotation.z=.32;let sh=new THREE.Mesh(new THREE.CylinderGeometry(.3,.3,.07,10),new THREE.MeshStandardMaterial({color:tc,metalness:.4,roughness:.5}));sh.rotation.z=Math.PI/2;sh.position.set(-.4,.95,.1);gear.add(bl,hilt,sh)}
  root.add(gear);root.position.set(team?51:-51,0,(i-1.5)*.8);scene.add(root);let e={kind:'minion',team,root,gear,walk:Math.random()*6,pos:root.position,hp:250,maxHp:250,atk:i===3?30:24,range:i===3?5.2:1.25,speed:3.2,cd:0,dead:false,lastDir:new THREE.Vector3(team?-1:1,0,0)};makeBar(e);game.minions.push(e)}
 
-const all=()=>[...game.heroes,...game.minions,...game.structures], enemies=o=>all().filter(e=>e.team!==o.team&&!e.dead&&e.hp>0&&!(e.kind==='core'&&game.structures.some(s=>s.team===e.team&&s.kind==='tower'&&!s.dead))), friends=o=>game.heroes.filter(e=>e.team===o.team&&!e.dead);
+const all=()=>[...game.heroes,...game.minions,...game.structures], enemies=o=>all().filter(e=>e.team!==o.team&&!e.dead&&e.hp>0&&!(e.kind==='core'&&game.structures.some(s=>s.team===e.team&&s.kind==='tower'&&!s.dead))&&canSee(o,e)), friends=o=>game.heroes.filter(e=>e.team===o.team&&!e.dead);
 function nearest(o,list=enemies(o)){let t=null,d=1e9;for(const e of list){let q=o.pos.distanceTo(e.pos);if(q<d){d=q;t=e}}return[t,d]}
 function face(o,t){if(!t)return;let dx=t.pos.x-o.pos.x,dz=t.pos.z-o.pos.z;o.root.rotation.y=Math.atan2(dx,dz);o.lastDir.set(dx,0,dz).normalize()}
 function setAnim(h,n,once=false){if(h.anim===n)return;let next=h.clips[n]||h.clips.idle;if(!next)return;let cur=h.clips[h.anim];cur?.fadeOut(.12);next.reset().fadeIn(.12);next.setLoop(once?THREE.LoopOnce:THREE.LoopRepeat,once?1:Infinity);next.clampWhenFinished=once;next.play();h.anim=n;if(once)setTimeout(()=>{if(!h.dead)setAnim(h,'idle')},480)}
@@ -95,9 +145,9 @@ function pickTarget(h,mode){
  const killable=ms.filter(e=>e.hp<=h.atk);return (killable.length?killable:ms).sort((a,b)=>a.hp-b.hp)[0]}
 function basic(h,mode,forced){if(!h||h.dead||h.cd[3]>0)return;let t=forced||pickTarget(h,mode);
  if(!t){if(h.player&&mode)feed(mode==='tower'?'射程内没有防御塔':'射程内没有小兵',0xffab6a);return}
- let d=h.pos.distanceTo(t.pos);if(d>h.range+1)return;h.cd[3]=.72;face(h,t);setAnim(h,h.range>3?'holding-right-shoot':'attack-melee-right',true);if(h.range>3)projectile(h,t,h.atk,h.def.color,18);else setTimeout(()=>{if(!t.dead&&h.pos.distanceTo(t.pos)<h.range+1.4)hurt(h,t,h.atk)},220)}
+ let d=h.pos.distanceTo(t.pos);if(d>h.range+1)return;h.cd[3]=.72;reveal(h);face(h,t);setAnim(h,h.range>3?'holding-right-shoot':'attack-melee-right',true);if(h.range>3)projectile(h,t,h.atk,h.def.color,18);else setTimeout(()=>{if(!t.dead&&h.pos.distanceTo(t.pos)<h.range+1.4)hurt(h,t,h.atk)},220)}
 function projectile(src,t,dmg,color,speed=20){let m=new THREE.Mesh(new THREE.SphereGeometry(.12,8,6),new THREE.MeshBasicMaterial({color:0xffffff}));m.add(glowSprite(color,1.15));m.position.copy(src.pos).add(new THREE.Vector3(0,1.2,0));scene.add(m);game.shots.push({mesh:m,pos:m.position,target:t,src,dmg,speed,color})}
-function cast(h,s){if(!h||h.dead||h.cd[s]>0||h.mana<(s===2?40:22))return;let[t,d]=nearest(h);h.mana-=s===2?40:22;h.cd[s]=[5,9,20][s]*(1-(h.cdr||0));let id=h.id;setAnim(h,id===3?'holding-both-shoot':'attack-melee-left',true);
+function cast(h,s){if(h&&!h.dead&&h.cd[s]<=0&&h.mana>=22)reveal(h);if(!h||h.dead||h.cd[s]>0||h.mana<(s===2?40:22))return;let[t,d]=nearest(h);h.mana-=s===2?40:22;h.cd[s]=[5,9,20][s]*(1-(h.cdr||0));let id=h.id;setAnim(h,id===3?'holding-both-shoot':'attack-melee-left',true);
  if(id===0){if(s===0&&t)enemies(h).sort((a,b)=>a.pos.distanceTo(t.pos)-b.pos.distanceTo(t.pos)).slice(0,3).forEach((e,i)=>{lightning(h.pos,e.pos,0x6fcfff);hurt(h,e,130-i*25)});if(s===1&&t)zone(t.pos,3.8,3,h.team,38,0x4abfff);if(s===2)enemies(h).filter(e=>e.kind==='hero').forEach(e=>{lightning(new THREE.Vector3(e.pos.x,12,e.pos.z),e.pos,0xb6e7ff);hurt(h,e,220)})}
  if(id===1){if(s===0&&t&&d<4){hurt(h,t,170);ring(t.pos,0xe6c078,2.4)}if(s===1)friends(h).forEach(a=>{if(a.pos.distanceTo(h.pos)<8)a.shield=5});if(s===2){ring(h.pos,0xffd37a,7);enemies(h).filter(e=>e.pos.distanceTo(h.pos)<7).forEach(e=>hurt(h,e,210))}}
  if(id===2){if(s===0&&t){let v=t.pos.clone().sub(h.pos).setY(0),l=Math.min(6,Math.max(0,v.length()-1));v.normalize();h.pos.addScaledVector(v,l);face(h,t);hurt(h,t,155);trail(h.pos,0xca75ff)}if(s===1){h.invis=3.5;h.buff=3.5;h._opaque=false;h.root.traverse(o=>{if(o.material){o.material.transparent=true;o.material.opacity=.28}})}if(s===2&&t){trail(t.pos,0xe8b2ff);hurt(h,t,t.hp/t.maxHp<.4?430:240)}}
@@ -183,7 +233,7 @@ function aiHero(h,dt){
   else if(h.cd[0]<=0&&h.mana>=22)cast(h,0);                                // 一技能:主力输出
   else if(h.cd[1]<=0&&h.mana>=22&&(h.id===1||h.id===4||hpr<.6||cluster>=2))cast(h,1);}
  if(h.id===4&&h.cd[1]<=0&&h.mana>=22&&mates.some(a=>a.hp/a.maxHp<.55&&a.pos.distanceTo(h.pos)<10))cast(h,1);}
-function update(dt){game.time+=dt;game.wave-=dt;for(const k in game.utility)game.utility[k]=Math.max(0,game.utility[k]-dt);if(game.wave<=0){spawnWave();game.wave=12}aiShop(dt);for(const h of game.heroes){h.mixer.update(dt);for(let i=0;i<4;i++)h.cd[i]=Math.max(0,h.cd[i]-dt);h.shield=Math.max(0,h.shield-dt);h.buff=Math.max(0,h.buff-dt);h.invis=Math.max(0,h.invis-dt);h.mana=Math.min(100,h.mana+7*dt);if(!h.dead&&h.pos.distanceTo(h.spawn)<7.5&&h.hp<h.maxHp){h.hp=Math.min(h.maxHp,h.hp+h.maxHp*.22*dt);h.mana=100;updateBar(h)}h.goldT+=dt;if(h.goldT>=1){h.goldT-=1;h.gold+=2;if(h.player)updateGold()}if(h.invis<=0&&h.model.children.length&&h.root.visible&&!h._opaque){h.root.traverse(o=>{if(o.material){o.material.opacity=1;o.material.transparent=false}});h._opaque=true}if(h.dead){h.respawn-=dt;if(h.respawn<=0){h.dead=false;h.hp=h.maxHp;h.mana=100;h.pos.copy(h.spawn);h.root.visible=true;h._opaque=false;h.retreat=false;h._stillT=0;h._lastPos=null;h.anim='';setAnim(h,'idle');updateBar(h)}continue}h.player?movePlayer(h,dt):aiHero(h,dt)}
+function update(dt){game.time+=dt;game.wave-=dt;for(const k in game.utility)game.utility[k]=Math.max(0,game.utility[k]-dt);if(game.wave<=0){spawnWave();game.wave=12}aiShop(dt);updateVision(dt);for(const h of game.heroes){h.mixer.update(dt);for(let i=0;i<4;i++)h.cd[i]=Math.max(0,h.cd[i]-dt);h.shield=Math.max(0,h.shield-dt);h.buff=Math.max(0,h.buff-dt);h.invis=Math.max(0,h.invis-dt);h.mana=Math.min(100,h.mana+7*dt);if(!h.dead&&h.pos.distanceTo(h.spawn)<7.5&&h.hp<h.maxHp){h.hp=Math.min(h.maxHp,h.hp+h.maxHp*.22*dt);h.mana=100;updateBar(h)}h.goldT+=dt;if(h.goldT>=1){h.goldT-=1;h.gold+=2;if(h.player)updateGold()}if(h.invis<=0&&h.model.children.length&&h.root.visible&&!h._opaque){h.root.traverse(o=>{if(o.material){o.material.opacity=1;o.material.transparent=false}});h._opaque=true}if(h.dead){h.respawn-=dt;if(h.respawn<=0){h.dead=false;h.hp=h.maxHp;h.mana=100;h.pos.copy(h.spawn);h.root.visible=true;h._opaque=false;h.retreat=false;h._stillT=0;h._lastPos=null;h.anim='';setAnim(h,'idle');updateBar(h)}continue}h.player?movePlayer(h,dt):aiHero(h,dt)}
  for(const m of game.minions){if(m.dead)continue;m.cd-=dt;if(m.gear){m.walk+=dt*9;m.gear.position.y=Math.abs(Math.sin(m.walk))*.08;m.gear.rotation.z=Math.sin(m.walk)*.06}let[t,d]=nearest(m);if(t&&d<m.range){if(m.cd<=0){m.cd=1.05;m.range>2?minionShot(m,t):hurt(m,t,m.atk)}}else{m.pos.x+=(m.team?-1:1)*m.speed*dt;m.root.rotation.y=m.team?-Math.PI/2:Math.PI/2}}
  for(const s of game.structures){if(s.dead)continue;s.cd-=dt;if(s.root.userData.gem)s.root.userData.gem.rotation.y+=dt;let[t,d]=nearest(s,enemies(s).filter(e=>e.kind!=='tower'&&e.kind!=='core'));if(t&&d<s.range&&s.cd<=0){s.cd=1;projectile(s,t,s.atk,s.team?0xff4868:0x42d6ff,20)}}
  for(const q of game.shots){if(q.target.dead){q.dead=true;continue}let v=q.target.pos.clone().add(new THREE.Vector3(0,.8,0)).sub(q.pos),d=v.length();if(d<.45){hurt(q.src,q.target,q.dmg);fxSprite(q.pos.clone(),q.color||0xffffff,1.3,.15,null,{shrink:-2});q.dead=true;scene.remove(q.mesh)}else{q.pos.addScaledVector(v.normalize(),q.speed*dt);q._t=(q._t||0)+dt;if(q._t>.03){q._t=0;fxSprite(q.pos.clone(),q.color||0xffffff,.5,.26,null,{shrink:2.6})}}}game.shots=game.shots.filter(q=>!q.dead);
@@ -192,7 +242,7 @@ function update(dt){game.time+=dt;game.wave-=dt;for(const k in game.utility)game
 function minionShot(m,t){projectile(m,t,m.atk,m.team?0xff5874:0x50d6ff,15)}
 function followCamera(dt){let p=game.player,z=innerWidth<820?1.2:1,desired=p.pos.clone().add(new THREE.Vector3(-8.2*z,14.5*z,12.6*z));camera.position.lerp(desired,1-Math.pow(.001,dt));if(game.shake>0){game.shake=Math.max(0,game.shake-dt*2.4);let sk=game.shake*.32;camera.position.x+=rand(-sk,sk);camera.position.y+=rand(-sk,sk);camera.position.z+=rand(-sk,sk)}camera.lookAt(p.pos.x+2.2,p.pos.y+.55,p.pos.z)}
 function updateHUD(){let p=game.player;let db=$('#deadBox');if(db){db.style.display=p.dead?'block':'none';if(p.dead)db.innerHTML='已阵亡<br><b>'+Math.ceil(p.respawn)+'</b><small>秒后复活</small>'}$('#heroName').textContent=p.def.name+' · '+p.def.role;$('#level').textContent='  Lv.'+p.level;$('#hp').style.width=100*p.hp/p.maxHp+'%';$('#mp').style.width=p.mana+'%';$('#xp').style.width=100*p.xp/(p.level*120)+'%';$('#bk').textContent=game.blueKills;$('#rk').textContent=game.redKills;let s=Math.floor(game.time);$('#time').textContent=String(s/60|0).padStart(2,'0')+':'+String(s%60).padStart(2,'0');p.def.skills.forEach((n,i)=>$('#sk'+i).textContent=n);let _lh=document.querySelector('.skill.lasthit');if(_lh){let m=pickTarget(p,'lasthit');_lh.classList.toggle('ready',!!(m&&m.hp<=p.atk))}let _tw=document.querySelector('.skill.tower');if(_tw)_tw.classList.toggle('ready',!!pickTarget(p,'tower'));document.querySelectorAll('.skill').forEach(b=>{let s=b.dataset.s,cd=(s==='a'||s==='lh'||s==='tw')?p.cd[3]:p.cd[+s],o=b.querySelector('.cd');o.style.display=cd>0?'flex':'none';o.textContent=cd>0?cd.toFixed(cd<3?1:0):''});document.querySelectorAll('.util').forEach(b=>{let cd=game.utility[b.dataset.u],o=b.querySelector('.cd');o.style.display=cd>0?'flex':'none';o.textContent=cd>0?Math.ceil(cd):''});drawMap()}
-function drawMap(){let c=$('#map'),x=c.getContext('2d'),w=c.width=c.clientWidth*2,h=c.height=c.clientHeight*2;x.clearRect(0,0,w,h);x.fillStyle='#163726';x.fillRect(0,0,w,h);x.fillStyle='#5e6267';x.fillRect(0,h*.39,w,h*.22);x.fillStyle='#1c6980';x.fillRect(w*.475,0,w*.05,h);for(const e of all()){if(e.dead)continue;x.fillStyle=e.team?'#ff536f':'#4bd8ff';let px=(e.pos.x+65)/130*w,pz=(e.pos.z+33)/66*h,r=e.kind==='hero'?5:e.kind==='core'?6:3;x.beginPath();x.arc(px,pz,r,0,7);x.fill()}}
+function drawMap(){let c=$('#map'),x=c.getContext('2d'),w=c.width=c.clientWidth*2,h=c.height=c.clientHeight*2;x.clearRect(0,0,w,h);x.fillStyle='#163726';x.fillRect(0,0,w,h);x.fillStyle='#5e6267';x.fillRect(0,h*.39,w,h*.22);x.fillStyle='#1c6980';x.fillRect(w*.475,0,w*.05,h);for(const e of game.bushes||[]){let px=(e.pos.x+65)/130*w,pz=(e.pos.z+33)/66*h;x.fillStyle='#1e5c2c';x.beginPath();x.arc(px,pz,e.r/130*w,0,7);x.fill()}for(const e of all()){if(e.dead)continue;if(e.team!==game.player.team&&!canSee(game.player,e))continue;x.fillStyle=e.team?'#ff536f':'#4bd8ff';let px=(e.pos.x+65)/130*w,pz=(e.pos.z+33)/66*h,r=e.kind==='hero'?5:e.kind==='core'?6:3;x.beginPath();x.arc(px,pz,r,0,7);x.fill()}}
 function floatText(pos,text,color){let v=pos.clone().add(new THREE.Vector3(0,2.5,0)).project(camera),d=document.createElement('div');d.className='damage';d.style.color='#'+color.toString(16).padStart(6,'0');d.style.left=(v.x*.5+.5)*innerWidth+'px';d.style.top=(-v.y*.5+.5)*innerHeight+'px';d.textContent=text;document.body.appendChild(d);setTimeout(()=>d.remove(),760)}
 function feed(text,color=0xffffff){let d=document.createElement('div');d.className='feed';d.style.color='#'+color.toString(16).padStart(6,'0');d.textContent=text;$('#feed').prepend(d);setTimeout(()=>d.remove(),5200)}
 function finish(blue){if(game.over)return;game.over=true;$('#hud').classList.add('hidden');$('#end').classList.remove('hidden');$('#result').textContent=blue?'赤晶破碎 · 苍穹胜利':'苍穹陷落 · 赤渊胜利';$('#result').style.color=blue?'#55d8ff':'#ff5d7b';let p=game.player;$('#stats').textContent=`${p.def.name}　击败 ${p.kills}　阵亡 ${p.deaths}　等级 ${p.level}`}
@@ -232,6 +282,7 @@ function initShopUI(){if($('#shopPanel'))return;
 .skill.lasthit{border-color:#ffd45c;background:radial-gradient(circle at 36% 27%,#8a6a1e,#241a05 72%);font-size:17px}
 .skill.tower{border-color:#9ad0ff;background:radial-gradient(circle at 36% 27%,#2a5f8a,#0a1c2c 72%);font-size:17px}
 .skill.ready{box-shadow:0 0 16px #ffd45ccc,inset 0 0 12px #ffd45c66;filter:brightness(1.25)}
+#hideTag{position:fixed;left:50%;top:12%;transform:translateX(-50%);background:rgba(12,32,18,.82);border:1px solid rgba(126,226,140,.5);color:#9fe8ae;padding:5px 16px;border-radius:16px;font:600 12px/1 sans-serif;z-index:32;display:none;pointer-events:none}
 #deadBox{position:fixed;top:38%;left:50%;transform:translateX(-50%);background:rgba(10,4,8,.82);border:1px solid rgba(255,90,120,.45);color:#ff9fb2;padding:14px 30px;border-radius:12px;font:600 15px/1.5 sans-serif;text-align:center;z-index:35;display:none;pointer-events:none}
 #deadBox b{display:block;font-size:38px;color:#fff;line-height:1.1}#deadBox small{font-size:11px;color:#c98a99}
 #goldBox{position:fixed;left:max(9px,env(safe-area-inset-left));top:186px;background:rgba(8,16,24,.8);border:1px solid rgba(255,212,92,.4);color:#ffd45c;padding:6px 12px;border-radius:20px;font:600 14px/1 sans-serif;z-index:30}
@@ -245,7 +296,7 @@ function initShopUI(){if($('#shopPanel'))return;
 .shopItem .ico{font-size:22px}.shopItem .inf{flex:1;display:flex;flex-direction:column;gap:2px}.shopItem .inf i{font-style:normal;font-size:11px;color:#8fa4b8}
 .shopItem em{font-style:normal;color:#ffd45c;font-weight:700;font-size:13px}
 .shopItem.owned{opacity:.45}.shopItem.owned em{color:#7fca7f}.shopItem.owned em::after{content:" ✓"}`;document.head.appendChild(st);
- let dbx=document.createElement('div');dbx.id='deadBox';document.body.appendChild(dbx);let gb=document.createElement('div');gb.id='goldBox';gb.innerHTML='🪙 <b id="goldNum">0</b>';document.body.appendChild(gb);
+ let htg=document.createElement('div');htg.id='hideTag';htg.textContent='🌿 隐匿中';document.body.appendChild(htg);let dbx=document.createElement('div');dbx.id='deadBox';document.body.appendChild(dbx);let gb=document.createElement('div');gb.id='goldBox';gb.innerHTML='🪙 <b id="goldNum">0</b>';document.body.appendChild(gb);
  let btn=document.createElement('button');btn.id='shopBtn';btn.textContent='🛒';btn.addEventListener('pointerdown',e=>{e.preventDefault();toggleShop()});document.body.appendChild(btn);
  let panel=document.createElement('div');panel.id='shopPanel';panel.innerHTML='<h3>⚖️ 军备商店 <small>补刀+38 · 击杀+300 · 每秒+2 (电脑按B开关)</small><button id="shopClose">✕</button></h3><div id="shopItems"></div>';document.body.appendChild(panel);
  panel.querySelector('#shopClose').addEventListener('click',toggleShop);
