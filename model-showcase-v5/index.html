@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <meta name="theme-color" content="#05070d">
+  <title>程序化英雄 · 夜隼 V5</title>
+  <link rel="stylesheet" href="./style.css">
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "../vendor/three.module.js"
+      }
+    }
+  </script>
+</head>
+<body>
+  <main id="app">
+    <div id="stage" aria-label="可旋转的三维英雄模型"></div>
+    <div class="vignette"></div>
+
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">ARENA 3D · PROCEDURAL HERO / V5</p>
+        <h1>夜隼 · 玄羽</h1>
+        <p class="subtitle">纯代码程序化建模 · 零外部模型文件</p>
+      </div>
+      <div class="quality-badge"><span></span> 正常人体比例 · 实时待机动画</div>
+    </header>
+
+    <section class="hero-card" aria-label="模型说明">
+      <div class="role-mark">游侠</div>
+      <p class="hero-kicker">MOBA HERO · GENERATED</p>
+      <h2>夜隼 · 玄羽</h2>
+      <p>头盔、护肩、胸甲、护腕、腰甲、护胫与飘动披风全部由 Three.js 几何体实时拼装生成，胸口能量核心与刃口发光同步脉动。</p>
+      <div class="stats">
+        <span>100% 程序化</span>
+        <span>骨骼式关节</span>
+        <span>披风顶点动画</span>
+      </div>
+    </section>
+
+    <div class="gesture-hint">单指旋转 · 双指缩放 · 滚轮拉近</div>
+
+    <nav class="action-bar" aria-label="操作">
+      <button class="action active" id="spin"><i>⟳</i><span>自动旋转</span></button>
+    </nav>
+
+    <section id="loading" class="loading" aria-live="polite">
+      <div class="loader-ring"></div>
+      <p>正在生成英雄...</p>
+      <small>拼装盔甲与骨骼关节</small>
+    </section>
+  </main>
+
+  <script type="module" src="./showcase.js"></script>
+</body>
+</html>
