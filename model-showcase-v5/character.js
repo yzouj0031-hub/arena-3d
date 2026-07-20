@@ -1,378 +1,409 @@
 import * as THREE from 'three';
 
 // ============================================================
-//  程序化人物建模 —— 赛博游侠「夜隼」
-//  纯几何体拼装，无外部 GLB，可整体导出为一个可动的角色。
-//  返回 { root, update(t) }，root 直接加入场景即可。
+//  程序化人物建模 —— 赛博游侠「夜隼·玄羽」
+//  曲面盔甲 + 贴身内衬 + 哑光金属，避免"乐高/方块"观感。
+//  返回 { root, rig, update(t) }，root 直接加入场景即可。
 // ============================================================
 
-const PALETTE = {
-  skin: 0xd9a689,
-  skinDark: 0xb07f63,
-  armorDark: 0x161c26,
-  armorMid: 0x263241,
-  armorLight: 0x9fb4c9,
-  trim: 0x35e0ff,        // 队伍能量色（青）
-  trimWarm: 0xffb347,
-  cloth: 0x2a2f3c,
-  clothTrim: 0x3a4256,
-  leather: 0x3a2a20,
-  hair: 0x1b1e28,
-  metalBright: 0xc9d8e6,
+const PAL = {
+  suit: 0x23272f,        // 贴身内衬（哑光深灰）
+  suitLit: 0x333b48,     // 内衬受光面
+  skin: 0xdcab8b,
+  armor: 0x3d4c5e,       // 主装甲（拉丝钢，非镜面塑料）
+  armorEdge: 0x8399ae,   // 装甲高光边
+  armorDark: 0x272f3a,
+  trim: 0x38e1ff,        // 队伍能量色
+  leather: 0x2c241e,
+  hair: 0x14161d,
+  metal: 0xaebccb,       // 武器金属
 };
 
 function mat(color, opts = {}) {
   return new THREE.MeshStandardMaterial({ color, ...opts });
 }
 
+// 关键：装甲用中等金属度 + 较高粗糙度 = 哑光拉丝金属，而不是反光塑料玩具
 const M = {
-  skin: mat(PALETTE.skin, { roughness: 0.62, metalness: 0.04 }),
-  skinDark: mat(PALETTE.skinDark, { roughness: 0.7 }),
-  armorDark: mat(PALETTE.armorDark, { roughness: 0.42, metalness: 0.72 }),
-  armorMid: mat(PALETTE.armorMid, { roughness: 0.38, metalness: 0.78 }),
-  armorLight: mat(PALETTE.armorLight, { roughness: 0.28, metalness: 0.88 }),
-  metal: mat(PALETTE.metalBright, { roughness: 0.2, metalness: 0.95 }),
-  cloth: mat(PALETTE.cloth, { roughness: 0.88, metalness: 0.02 }),
-  clothTrim: mat(PALETTE.clothTrim, { roughness: 0.8 }),
-  leather: mat(PALETTE.leather, { roughness: 0.72, metalness: 0.06 }),
-  hair: mat(PALETTE.hair, { roughness: 0.55, metalness: 0.1 }),
-  trim: mat(PALETTE.trim, { roughness: 0.3, metalness: 0.4, emissive: PALETTE.trim, emissiveIntensity: 1.5 }),
-  trimWarm: mat(PALETTE.trimWarm, { emissive: PALETTE.trimWarm, emissiveIntensity: 1.2, roughness: 0.5 }),
-  visor: mat(0x0a1420, { roughness: 0.08, metalness: 0.6, emissive: PALETTE.trim, emissiveIntensity: 0.9 }),
+  suit: mat(PAL.suit, { roughness: 0.92, metalness: 0.08 }),
+  suitLit: mat(PAL.suitLit, { roughness: 0.85, metalness: 0.12 }),
+  skin: mat(PAL.skin, { roughness: 0.72, metalness: 0.0 }),
+  armor: mat(PAL.armor, { roughness: 0.52, metalness: 0.62 }),
+  armorEdge: mat(PAL.armorEdge, { roughness: 0.44, metalness: 0.7 }),
+  armorDark: mat(PAL.armorDark, { roughness: 0.6, metalness: 0.5 }),
+  leather: mat(PAL.leather, { roughness: 0.8, metalness: 0.05 }),
+  hair: mat(PAL.hair, { roughness: 0.62, metalness: 0.08 }),
+  trim: mat(PAL.trim, { roughness: 0.35, metalness: 0.3, emissive: PAL.trim, emissiveIntensity: 1.25 }),
+  visor: mat(0x0a1622, { roughness: 0.12, metalness: 0.5, emissive: PAL.trim, emissiveIntensity: 0.8 }),
+  metal: mat(PAL.metal, { roughness: 0.32, metalness: 0.85 }),
 };
 
-function meshShadow(m) {
-  m.castShadow = true;
-  m.receiveShadow = true;
+function shadow(m) { m.castShadow = true; m.receiveShadow = true; return m; }
+
+// 圆角甲片：用带圆角矩形 + 挤出 + 斜角，得到有厚度的弧形甲片（非方盒）
+function roundedPlate(w, h, d, r, material) {
+  const s = new THREE.Shape();
+  const x = -w / 2, y = -h / 2;
+  s.moveTo(x + r, y);
+  s.lineTo(x + w - r, y);
+  s.quadraticCurveTo(x + w, y, x + w, y + r);
+  s.lineTo(x + w, y + h - r);
+  s.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  s.lineTo(x + r, y + h);
+  s.quadraticCurveTo(x, y + h, x, y + h - r);
+  s.lineTo(x, y + r);
+  s.quadraticCurveTo(x, y, x + r, y);
+  const g = new THREE.ExtrudeGeometry(s, {
+    depth: d, bevelEnabled: true, bevelThickness: Math.min(0.04, d * 0.4),
+    bevelSize: Math.min(0.03, r * 0.8), bevelSegments: 2, steps: 1,
+  });
+  g.center();
+  return shadow(new THREE.Mesh(g, material));
+}
+
+// 弧形壳（球面的一块）——做胸甲/护肩/膝盖等贴合曲面
+function shell(radius, phiLen, thetaStart, thetaLen, material) {
+  const g = new THREE.SphereGeometry(radius, 28, 20, -phiLen / 2, phiLen, thetaStart, thetaLen);
+  return shadow(new THREE.Mesh(g, material));
+}
+
+// 发光细条
+function glowBar(len, thick, material, horizontal = false) {
+  const g = new THREE.CapsuleGeometry(thick, len, 4, 8);
+  const m = new THREE.Mesh(g, material);
+  if (horizontal) m.rotation.z = Math.PI / 2;
   return m;
-}
-
-// 一个圆角箱体（用于甲片），比裸 Box 更精致
-function plate(w, h, d, material, r = 0.03) {
-  // 用 Box + 轻微缩放的斜角替代，避免额外依赖；这里用 Box 足够，靠材质出效果
-  const g = new THREE.BoxGeometry(w, h, d, 1, 1, 1);
-  return meshShadow(new THREE.Mesh(g, material));
-}
-
-// 生成一个能发光的细条描边
-function trimBar(len, thick, material, axis = 'y') {
-  const g = new THREE.BoxGeometry(
-    axis === 'x' ? len : thick,
-    axis === 'y' ? len : thick,
-    thick,
-  );
-  return new THREE.Mesh(g, material);
 }
 
 export function buildCharacter() {
   const root = new THREE.Group();
   root.name = 'Hero';
-
-  // 关节容器，便于做待机动画
   const rig = {};
 
-  // ---------- 骨盆 / 腰 ----------
+  // ---------- 骨盆 ----------
   const hips = new THREE.Group();
-  hips.position.y = 3.35;
+  hips.position.y = 3.3;
   root.add(hips);
   rig.hips = hips;
 
+  // 骨盆内衬（连续实体，填满缝隙）
+  const pelvis = new THREE.Mesh(new THREE.SphereGeometry(0.46, 24, 18), M.suit);
+  pelvis.scale.set(1.05, 0.82, 0.78);
+  shadow(pelvis);
+  hips.add(pelvis);
+
   // 腰带
-  const belt = plate(0.98, 0.34, 0.62, M.leather);
-  belt.position.y = 0;
+  const belt = new THREE.Mesh(new THREE.CylinderGeometry(0.47, 0.5, 0.26, 24), M.leather);
+  belt.position.y = 0.06;
+  shadow(belt);
   hips.add(belt);
-  const buckle = new THREE.Mesh(new THREE.IcosahedronGeometry(0.16, 0), M.trim);
-  buckle.position.set(0, 0, 0.34);
+  const buckle = new THREE.Mesh(new THREE.OctahedronGeometry(0.13, 0), M.trim);
+  buckle.position.set(0, 0.06, 0.46);
+  buckle.scale.set(1, 1.2, 0.5);
   hips.add(buckle);
 
-  // 腰侧发光条
+  // 前腰甲（弧形垂片）
+  const tasset = shell(0.5, Math.PI * 0.9, Math.PI * 0.42, Math.PI * 0.3, M.armor);
+  tasset.position.set(0, -0.28, 0.02);
+  tasset.rotation.x = 0.05;
+  hips.add(tasset);
+  const tassetGlow = glowBar(0.34, 0.018, M.trim, true);
+  tassetGlow.position.set(0, -0.5, 0.42);
+  hips.add(tassetGlow);
+  // 侧腰甲
   for (const s of [-1, 1]) {
-    const b = trimBar(0.3, 0.05, M.trim, 'y');
-    b.position.set(s * 0.42, 0, 0.3);
-    hips.add(b);
+    const side = roundedPlate(0.26, 0.42, 0.1, 0.08, M.armorDark);
+    side.position.set(s * 0.4, -0.24, 0.06);
+    side.rotation.z = s * 0.12;
+    side.rotation.y = s * -0.5;
+    hips.add(side);
   }
-
-  // 前后腰甲（垂片）
-  const tassetFront = plate(0.5, 0.55, 0.08, M.armorMid);
-  tassetFront.position.set(0, -0.42, 0.32);
-  tassetFront.rotation.x = 0.12;
-  hips.add(tassetFront);
-  const tassetFrontTrim = trimBar(0.42, 0.04, M.trim, 'x');
-  tassetFrontTrim.position.set(0, -0.62, 0.37);
-  hips.add(tassetFrontTrim);
 
   // ---------- 脊柱 / 躯干 ----------
   const spine = new THREE.Group();
-  spine.position.y = 0.2;
+  spine.position.y = 0.18;
   hips.add(spine);
   rig.spine = spine;
 
-  // 腹部（收窄）
-  const abdomen = new THREE.Mesh(
-    new THREE.CapsuleGeometry(0.42, 0.3, 6, 16),
-    M.armorDark,
-  );
-  abdomen.scale.set(1.05, 1, 0.8);
-  abdomen.position.y = 0.35;
-  meshShadow(abdomen);
+  // 腹部内衬（收腰的连续体）
+  const abdomen = new THREE.Mesh(new THREE.SphereGeometry(0.4, 24, 18), M.suit);
+  abdomen.scale.set(0.98, 1.15, 0.72);
+  abdomen.position.y = 0.34;
+  shadow(abdomen);
   spine.add(abdomen);
 
-  // 腹肌发光分隔线
-  for (let i = 0; i < 3; i++) {
-    const line = trimBar(0.5, 0.03, M.trim, 'x');
-    line.position.set(0, 0.15 + i * 0.18, 0.36);
-    spine.add(line);
-  }
-
-  // 胸甲（胸腔 + 甲片）
+  // 胸腔
   const chest = new THREE.Group();
-  chest.position.y = 0.82;
+  chest.position.y = 0.78;
   spine.add(chest);
   rig.chest = chest;
 
-  const torso = new THREE.Mesh(
-    new THREE.CapsuleGeometry(0.55, 0.42, 8, 20),
-    M.armorMid,
-  );
-  torso.scale.set(1.15, 1, 0.82);
-  meshShadow(torso);
-  chest.add(torso);
+  // 胸腔内衬（宽肩收腰的躯干块）
+  const ribcage = new THREE.Mesh(new THREE.SphereGeometry(0.5, 28, 22), M.suitLit);
+  ribcage.scale.set(1.22, 1.05, 0.78);
+  ribcage.position.y = 0.02;
+  shadow(ribcage);
+  chest.add(ribcage);
 
-  // 胸口发光核心
-  const coreHousing = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.24, 0.14, 16), M.armorDark);
-  coreHousing.rotation.x = Math.PI / 2;
-  coreHousing.position.set(0, 0.12, 0.5);
-  chest.add(coreHousing);
-  const core = new THREE.Mesh(new THREE.IcosahedronGeometry(0.15, 1), M.trim);
-  core.position.set(0, 0.12, 0.55);
+  // 胸甲（贴合曲面的前甲，两片胸肌造型）
+  const cuirass = shell(0.56, Math.PI * 1.15, Math.PI * 0.32, Math.PI * 0.5, M.armor);
+  cuirass.scale.set(1.16, 1.1, 0.92);
+  cuirass.position.set(0, 0.05, 0.02);
+  chest.add(cuirass);
+  // 胸甲中缝发光
+  const chestSeam = glowBar(0.5, 0.016, M.trim);
+  chestSeam.position.set(0, 0.05, 0.54);
+  chest.add(chestSeam);
+  // 锁骨/肩线高光边
+  for (const s of [-1, 1]) {
+    const clav = new THREE.Mesh(new THREE.TorusGeometry(0.34, 0.03, 8, 24, Math.PI * 0.5), M.armorEdge);
+    clav.position.set(s * 0.12, 0.32, 0.28);
+    clav.rotation.set(Math.PI * 0.5, 0, s * -0.9);
+    chest.add(clav);
+  }
+
+  // 胸口能量核心
+  const coreRing = new THREE.Mesh(new THREE.TorusGeometry(0.14, 0.035, 12, 28), M.armorEdge);
+  coreRing.position.set(0, 0.08, 0.5);
+  chest.add(coreRing);
+  const core = new THREE.Mesh(new THREE.IcosahedronGeometry(0.11, 1), M.trim);
+  core.position.set(0, 0.08, 0.53);
   chest.add(core);
   rig.core = core;
-  const coreLight = new THREE.PointLight(PALETTE.trim, 3, 4, 2);
-  coreLight.position.set(0, 0.12, 0.7);
+  const coreLight = new THREE.PointLight(PAL.trim, 2.2, 3.2, 2);
+  coreLight.position.set(0, 0.08, 0.75);
   chest.add(coreLight);
-
-  // 胸甲斜切装饰片
-  for (const s of [-1, 1]) {
-    const pec = plate(0.42, 0.5, 0.16, M.armorLight);
-    pec.position.set(s * 0.28, 0.1, 0.4);
-    pec.rotation.z = s * -0.18;
-    chest.add(pec);
-    const pecTrim = trimBar(0.4, 0.035, M.trim, 'y');
-    pecTrim.position.set(s * 0.46, 0.1, 0.45);
-    pecTrim.rotation.z = s * -0.18;
-    chest.add(pecTrim);
-  }
 
   // ---------- 颈 / 头 ----------
   const neck = new THREE.Group();
-  neck.position.y = 0.62;
+  neck.position.y = 0.5;
   chest.add(neck);
   rig.neck = neck;
 
-  const neckMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.2, 0.28, 12), M.skin);
-  neckMesh.position.y = 0.14;
-  meshShadow(neckMesh);
+  const neckMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.19, 0.3, 16), M.skin);
+  neckMesh.position.y = 0.13;
+  shadow(neckMesh);
   neck.add(neckMesh);
-
-  // 高领护颈
-  const collar = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.3, 0.34, 0.28, 16, 1, true, -Math.PI * 0.75, Math.PI * 1.5),
-    M.armorMid,
-  );
-  collar.position.y = 0.16;
-  meshShadow(collar);
-  neck.add(collar);
+  // 护颈（半圈立领）
+  const gorget = shell(0.28, Math.PI * 1.3, Math.PI * 0.36, Math.PI * 0.34, M.armor);
+  gorget.position.y = 0.16;
+  gorget.rotation.x = -0.1;
+  neck.add(gorget);
 
   const head = new THREE.Group();
   head.position.y = 0.42;
   neck.add(head);
   rig.head = head;
 
-  // 头颅
-  const skull = new THREE.Mesh(new THREE.SphereGeometry(0.32, 24, 20), M.skin);
-  skull.scale.set(0.92, 1.04, 0.98);
-  skull.position.y = 0.12;
-  meshShadow(skull);
+  // 头颅（拉长的椭球，人形而非圆球）
+  const skull = new THREE.Mesh(new THREE.SphereGeometry(0.29, 28, 24), M.skin);
+  skull.scale.set(0.86, 1.02, 0.96);
+  skull.position.y = 0.1;
+  shadow(skull);
   head.add(skull);
-
-  // 下巴 / 脸颊收窄
-  const jaw = new THREE.Mesh(new THREE.SphereGeometry(0.24, 20, 16), M.skin);
-  jaw.scale.set(0.82, 0.7, 0.9);
-  jaw.position.set(0, -0.04, 0.03);
-  meshShadow(jaw);
+  // 下颌收窄
+  const jaw = new THREE.Mesh(new THREE.SphereGeometry(0.22, 20, 16), M.skin);
+  jaw.scale.set(0.78, 0.66, 0.86);
+  jaw.position.set(0, -0.06, 0.02);
+  shadow(jaw);
   head.add(jaw);
 
-  // 头盔（半覆盖，露脸）
-  const helm = new THREE.Mesh(
-    new THREE.SphereGeometry(0.35, 24, 20, 0, Math.PI * 2, 0, Math.PI * 0.62),
-    M.armorMid,
-  );
-  helm.scale.set(0.94, 1.05, 1.0);
-  helm.position.y = 0.14;
-  meshShadow(helm);
+  // 头盔（贴合弧形，露出下半脸）
+  const helm = shell(0.32, Math.PI * 2, 0, Math.PI * 0.6, M.armor);
+  helm.scale.set(0.92, 1.06, 1.0);
+  helm.position.y = 0.12;
   head.add(helm);
-
-  // 头盔中脊
-  const crest = plate(0.06, 0.42, 0.3, M.armorLight);
-  crest.position.set(0, 0.24, -0.02);
+  // 头盔后包裹
+  const helmBack = shell(0.31, Math.PI * 1.1, Math.PI * 0.35, Math.PI * 0.5, M.armorDark);
+  helmBack.scale.set(0.94, 1.0, 1.0);
+  helmBack.position.set(0, 0.06, -0.03);
+  helmBack.rotation.y = Math.PI;
+  head.add(helmBack);
+  // 中脊
+  const crest = roundedPlate(0.05, 0.46, 0.14, 0.02, M.armorEdge);
+  crest.position.set(0, 0.2, -0.04);
+  crest.rotation.x = -0.15;
   head.add(crest);
-  const crestGlow = trimBar(0.34, 0.03, M.trim, 'y');
-  crestGlow.position.set(0, 0.26, 0.14);
-  crestGlow.rotation.x = -0.4;
-  head.add(crestGlow);
 
-  // 护目发光条（横跨眉眼）
-  const visor = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.09, 0.06), M.visor);
-  visor.position.set(0, 0.08, 0.28);
-  head.add(visor);
-
-  // 双眼发光点
+  // 护目发光带
+  const visorBar = new THREE.Mesh(new THREE.TorusGeometry(0.26, 0.045, 10, 24, Math.PI * 0.9), M.visor);
+  visorBar.position.set(0, 0.06, 0.04);
+  visorBar.rotation.set(Math.PI * 0.5, 0, Math.PI * 0.5 + Math.PI * 0.05);
+  head.add(visorBar);
   for (const s of [-1, 1]) {
-    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.045, 10, 8), M.trim);
-    eye.position.set(s * 0.12, 0.08, 0.31);
+    const eye = new THREE.Mesh(new THREE.CapsuleGeometry(0.028, 0.08, 4, 8), M.trim);
+    eye.rotation.z = Math.PI / 2 - s * 0.25;
+    eye.position.set(s * 0.11, 0.07, 0.27);
     head.add(eye);
   }
 
-  // 侧耳护甲
-  for (const s of [-1, 1]) {
-    const earGuard = plate(0.07, 0.24, 0.2, M.armorDark);
-    earGuard.position.set(s * 0.33, 0.06, 0.02);
-    head.add(earGuard);
-    const earTrim = trimBar(0.16, 0.03, M.trim, 'y');
-    earTrim.position.set(s * 0.37, 0.06, 0.06);
-    head.add(earTrim);
-  }
-
-  // 后脑束发
-  const hair = new THREE.Mesh(new THREE.SphereGeometry(0.3, 16, 14, 0, Math.PI * 2, Math.PI * 0.5, Math.PI * 0.5), M.hair);
-  hair.scale.set(0.96, 0.8, 1.0);
-  hair.position.set(0, 0.08, -0.04);
-  head.add(hair);
-  const ponytail = new THREE.Mesh(new THREE.CapsuleGeometry(0.08, 0.5, 6, 10), M.hair);
-  ponytail.position.set(0, -0.05, -0.3);
-  ponytail.rotation.x = 0.5;
+  // 束发（贴头顶后梳 + 马尾）
+  const hairCap = shell(0.3, Math.PI * 1.2, Math.PI * 0.28, Math.PI * 0.55, M.hair);
+  hairCap.scale.set(0.98, 0.92, 1.0);
+  hairCap.position.set(0, 0.1, -0.05);
+  hairCap.rotation.y = Math.PI;
+  head.add(hairCap);
+  const ponytail = new THREE.Mesh(new THREE.CapsuleGeometry(0.07, 0.55, 8, 12), M.hair);
+  ponytail.scale.set(1, 1, 0.7);
+  ponytail.position.set(0, -0.04, -0.28);
+  ponytail.rotation.x = 0.55;
   head.add(ponytail);
   rig.ponytail = ponytail;
 
   // ---------- 手臂 ----------
   function buildArm(side) {
     const shoulder = new THREE.Group();
-    shoulder.position.set(side * 0.66, 0.42, 0);
+    shoulder.position.set(side * 0.6, 0.34, 0);
     chest.add(shoulder);
 
-    // 肩甲（大护肩）
-    const pauldron = new THREE.Mesh(new THREE.SphereGeometry(0.34, 20, 16, 0, Math.PI * 2, 0, Math.PI * 0.62), M.armorLight);
-    pauldron.scale.set(1.1, 0.9, 1.1);
-    pauldron.position.set(side * 0.12, 0.12, 0);
-    meshShadow(pauldron);
-    shoulder.add(pauldron);
-    const pauldronEdge = new THREE.Mesh(new THREE.TorusGeometry(0.3, 0.03, 8, 24, Math.PI), M.trim);
-    pauldronEdge.rotation.set(Math.PI / 2, 0, side < 0 ? 0 : Math.PI);
-    pauldronEdge.position.set(side * 0.12, 0.1, 0);
-    shoulder.add(pauldronEdge);
-    const spike = new THREE.Mesh(new THREE.ConeGeometry(0.09, 0.28, 8), M.armorDark);
-    spike.position.set(side * 0.3, 0.22, 0);
-    spike.rotation.z = side * -0.6;
-    shoulder.add(spike);
+    // 肩关节内衬球（填满肩窝，无缝）
+    const shoulderBall = new THREE.Mesh(new THREE.SphereGeometry(0.22, 20, 16), M.suit);
+    shadow(shoulderBall);
+    shoulder.add(shoulderBall);
+
+    // 护肩（层叠弧形甲片，非圆球）
+    const layers = [
+      { r: 0.34, y: 0.14, x: 0.05, mat: M.armor },
+      { r: 0.3, y: 0.02, x: 0.1, mat: M.armorDark },
+      { r: 0.25, y: -0.08, x: 0.14, mat: M.armor },
+    ];
+    for (const L of layers) {
+      const p = shell(L.r, Math.PI * 1.1, Math.PI * 0.42, Math.PI * 0.5, L.mat);
+      p.scale.set(1.1, 0.7, 1.1);
+      p.position.set(side * L.x, L.y, 0);
+      p.rotation.z = side * -0.15;
+      shoulder.add(p);
+    }
+    const pauldronGlow = new THREE.Mesh(new THREE.TorusGeometry(0.3, 0.02, 8, 24, Math.PI), M.trim);
+    pauldronGlow.rotation.set(Math.PI / 2, side < 0 ? 0.2 : Math.PI - 0.2, 0);
+    pauldronGlow.position.set(side * 0.05, 0.14, 0);
+    shoulder.add(pauldronGlow);
 
     // 上臂
     const upperArm = new THREE.Group();
-    upperArm.position.set(side * 0.16, -0.05, 0);
+    upperArm.position.set(side * 0.12, -0.02, 0);
     shoulder.add(upperArm);
-    const bicep = new THREE.Mesh(new THREE.CapsuleGeometry(0.16, 0.4, 6, 14), M.armorDark);
-    bicep.position.y = -0.28;
-    meshShadow(bicep);
+    const bicep = new THREE.Mesh(new THREE.CapsuleGeometry(0.15, 0.42, 8, 16), M.suit);
+    bicep.position.y = -0.26;
+    shadow(bicep);
     upperArm.add(bicep);
 
-    // 肘 / 前臂
+    // 前臂（含肘、护腕）
     const forearm = new THREE.Group();
-    forearm.position.y = -0.56;
+    forearm.position.y = -0.54;
     upperArm.add(forearm);
-    const elbowGuard = new THREE.Mesh(new THREE.SphereGeometry(0.15, 12, 10), M.armorMid);
-    forearm.add(elbowGuard);
-    const bracer = new THREE.Mesh(new THREE.CapsuleGeometry(0.15, 0.38, 6, 14), M.armorMid);
-    bracer.position.y = -0.28;
-    meshShadow(bracer);
+    // 肘部内衬（无缝衔接）
+    const elbow = new THREE.Mesh(new THREE.SphereGeometry(0.15, 16, 12), M.suit);
+    shadow(elbow);
+    forearm.add(elbow);
+    const bracer = new THREE.Mesh(new THREE.CapsuleGeometry(0.145, 0.4, 8, 16), M.suit);
+    bracer.position.y = -0.27;
+    shadow(bracer);
     forearm.add(bracer);
-    // 护腕发光环
-    const bracerTrim = new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.025, 8, 20), M.trim);
-    bracerTrim.rotation.x = Math.PI / 2;
-    bracerTrim.position.y = -0.42;
-    forearm.add(bracerTrim);
+    // 护腕装甲（半包弧形）
+    const bracerArmor = shell(0.19, Math.PI * 1.3, Math.PI * 0.34, Math.PI * 0.55, M.armor);
+    bracerArmor.scale.set(1, 1.6, 1);
+    bracerArmor.position.set(0, -0.3, 0.02);
+    bracerArmor.rotation.x = Math.PI;
+    forearm.add(bracerArmor);
+    const bracerGlow = glowBar(0.16, 0.014, M.trim, true);
+    bracerGlow.position.set(0, -0.14, 0.16);
+    forearm.add(bracerGlow);
 
-    // 手
+    // 手（塑形拳套）
     const hand = new THREE.Group();
     hand.position.y = -0.52;
     forearm.add(hand);
-    const palm = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.2, 0.12), M.armorDark);
-    meshShadow(palm);
+    const palm = new THREE.Mesh(new THREE.SphereGeometry(0.11, 16, 12), M.armorDark);
+    palm.scale.set(0.9, 1.1, 0.7);
+    shadow(palm);
     hand.add(palm);
-    const fingers = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.14, 0.1), M.armorDark);
-    fingers.position.set(0, -0.15, 0.02);
+    const knuckle = roundedPlate(0.16, 0.1, 0.08, 0.03, M.armor);
+    knuckle.position.set(0, -0.02, 0.06);
+    hand.add(knuckle);
+    const fingers = new THREE.Mesh(new THREE.CapsuleGeometry(0.05, 0.14, 4, 8), M.suit);
+    fingers.position.set(0, -0.16, 0.02);
     hand.add(fingers);
-    const thumb = new THREE.Mesh(new THREE.CapsuleGeometry(0.035, 0.08, 4, 8), M.armorDark);
-    thumb.position.set(side * 0.09, -0.05, 0.03);
-    thumb.rotation.z = side * 0.6;
+    const thumb = new THREE.Mesh(new THREE.CapsuleGeometry(0.038, 0.08, 4, 8), M.suit);
+    thumb.position.set(side * 0.08, -0.06, 0.04);
+    thumb.rotation.z = side * 0.7;
     hand.add(thumb);
 
     rig[`arm_${side < 0 ? 'l' : 'r'}`] = { shoulder, upperArm, forearm, hand };
     return hand;
   }
 
-  const handL = buildArm(-1);
+  buildArm(-1);
   const handR = buildArm(1);
   rig.handR = handR;
 
   // ---------- 腿 ----------
   function buildLeg(side) {
     const hip = new THREE.Group();
-    hip.position.set(side * 0.28, -0.1, 0);
+    hip.position.set(side * 0.24, -0.12, 0);
     hips.add(hip);
 
-    const thigh = new THREE.Mesh(new THREE.CapsuleGeometry(0.2, 0.5, 6, 14), M.armorDark);
+    // 大腿（内衬）
+    const thigh = new THREE.Mesh(new THREE.CapsuleGeometry(0.2, 0.52, 8, 16), M.suit);
     thigh.position.y = -0.38;
-    meshShadow(thigh);
+    shadow(thigh);
     hip.add(thigh);
-    // 大腿甲片
-    const thighPlate = plate(0.34, 0.5, 0.16, M.armorMid);
-    thighPlate.position.set(0, -0.36, 0.18);
-    hip.add(thighPlate);
+    // 大腿外侧甲片（弧形）
+    const thighArmor = shell(0.26, Math.PI * 1.1, Math.PI * 0.38, Math.PI * 0.5, M.armor);
+    thighArmor.scale.set(1, 1.8, 1);
+    thighArmor.position.set(0, -0.34, 0.04);
+    hip.add(thighArmor);
 
+    // 膝
     const knee = new THREE.Group();
-    knee.position.y = -0.72;
+    knee.position.y = -0.74;
     hip.add(knee);
-    const kneeCap = new THREE.Mesh(new THREE.SphereGeometry(0.19, 14, 12), M.armorLight);
-    kneeCap.scale.set(1, 1, 1.1);
+    const kneeIn = new THREE.Mesh(new THREE.SphereGeometry(0.18, 16, 12), M.suit);
+    shadow(kneeIn);
+    knee.add(kneeIn);
+    const kneeCap = shell(0.2, Math.PI * 1.2, Math.PI * 0.36, Math.PI * 0.5, M.armorEdge);
+    kneeCap.position.set(0, 0, 0.04);
     knee.add(kneeCap);
-    const kneeSpike = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.18, 8), M.armorMid);
-    kneeSpike.position.set(0, 0.02, 0.2);
-    kneeSpike.rotation.x = Math.PI / 2;
-    knee.add(kneeSpike);
 
+    // 小腿
     const shin = new THREE.Group();
-    shin.position.y = -0.1;
     knee.add(shin);
-    const shinMesh = new THREE.Mesh(new THREE.CapsuleGeometry(0.17, 0.5, 6, 14), M.armorMid);
-    shinMesh.position.y = -0.34;
-    meshShadow(shinMesh);
-    shin.add(shinMesh);
-    const shinTrim = trimBar(0.4, 0.03, M.trim, 'y');
-    shinTrim.position.set(0, -0.34, 0.18);
-    shin.add(shinTrim);
+    const shinIn = new THREE.Mesh(new THREE.CapsuleGeometry(0.17, 0.5, 8, 16), M.suit);
+    shinIn.position.y = -0.34;
+    shadow(shinIn);
+    shin.add(shinIn);
+    const shinArmor = shell(0.2, Math.PI * 1.25, Math.PI * 0.36, Math.PI * 0.5, M.armor);
+    shinArmor.scale.set(1, 1.9, 1);
+    shinArmor.position.set(0, -0.36, 0.03);
+    shin.add(shinArmor);
+    const shinGlow = glowBar(0.34, 0.014, M.trim);
+    shinGlow.position.set(0, -0.34, 0.2);
+    shin.add(shinGlow);
 
-    // 靴
+    // 靴（塑形，非方盒）
     const boot = new THREE.Group();
-    boot.position.y = -0.66;
+    boot.position.y = -0.64;
     shin.add(boot);
-    const ankle = new THREE.Mesh(new THREE.SphereGeometry(0.16, 12, 10), M.armorDark);
+    const ankle = new THREE.Mesh(new THREE.SphereGeometry(0.16, 16, 12), M.armorDark);
+    ankle.scale.set(1, 1, 1.1);
+    shadow(ankle);
     boot.add(ankle);
-    const foot = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.16, 0.5), M.armorDark);
-    foot.position.set(0, -0.1, 0.14);
-    meshShadow(foot);
+    // 脚背（拉长半球）
+    const foot = new THREE.Mesh(new THREE.SphereGeometry(0.17, 20, 14), M.armorDark);
+    foot.scale.set(0.85, 0.7, 1.7);
+    foot.position.set(0, -0.1, 0.16);
+    shadow(foot);
     boot.add(foot);
-    const toe = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.1, 0.14), M.armorMid);
-    toe.position.set(0, -0.12, 0.4);
+    // 脚尖
+    const toe = new THREE.Mesh(new THREE.SphereGeometry(0.13, 16, 12), M.armor);
+    toe.scale.set(0.85, 0.6, 1.0);
+    toe.position.set(0, -0.11, 0.4);
+    shadow(toe);
     boot.add(toe);
+    // 靴筒护甲
+    const bootGuard = shell(0.2, Math.PI * 1.2, Math.PI * 0.4, Math.PI * 0.45, M.armor);
+    bootGuard.position.set(0, 0.06, 0.03);
+    boot.add(bootGuard);
 
     rig[`leg_${side < 0 ? 'l' : 'r'}`] = { hip, knee, shin };
     return hip;
@@ -383,138 +414,122 @@ export function buildCharacter() {
 
   // ---------- 披风 ----------
   const capeGroup = new THREE.Group();
-  capeGroup.position.set(0, 4.55, -0.32);
+  capeGroup.position.set(0, 4.5, -0.34);
   root.add(capeGroup);
-  const capeW = 1.3;
-  const capeH = 2.2;
-  const segX = 12;
-  const segY = 18;
+  const capeW = 1.35, capeH = 2.3, segX = 16, segY = 22;
   const capeGeo = new THREE.PlaneGeometry(capeW, capeH, segX, segY);
-  const capeMat = new THREE.MeshStandardMaterial({
-    color: PALETTE.cloth,
-    roughness: 0.85,
-    metalness: 0.05,
-    side: THREE.DoubleSide,
-  });
-  const cape = new THREE.Mesh(capeGeo, capeMat);
+  const cape = new THREE.Mesh(capeGeo, new THREE.MeshStandardMaterial({
+    color: 0x232833, roughness: 0.92, metalness: 0.04, side: THREE.DoubleSide,
+  }));
   cape.castShadow = true;
   cape.position.y = -capeH / 2;
   capeGroup.add(cape);
-  // 披风内衬发光边
   const capeTrim = new THREE.Mesh(
-    new THREE.PlaneGeometry(capeW * 1.02, 0.12),
-    new THREE.MeshStandardMaterial({ color: PALETTE.trim, emissive: PALETTE.trim, emissiveIntensity: 1.2, side: THREE.DoubleSide }),
+    new THREE.PlaneGeometry(capeW * 1.02, 0.1),
+    new THREE.MeshStandardMaterial({ color: PAL.trim, emissive: PAL.trim, emissiveIntensity: 1.0, side: THREE.DoubleSide }),
   );
-  capeTrim.position.y = -capeH + 0.06;
+  capeTrim.position.y = -capeH + 0.05;
   capeGroup.add(capeTrim);
+  // 披风领扣
+  for (const s of [-1, 1]) {
+    const clasp = new THREE.Mesh(new THREE.OctahedronGeometry(0.07, 0), M.trim);
+    clasp.position.set(s * 0.32, 0.02, 0.05);
+    capeGroup.add(clasp);
+  }
   rig.cape = cape;
   rig.capeTrim = capeTrim;
   const capeBase = capeGeo.attributes.position.array.slice();
 
-  // ---------- 武器：能量双刃匕（握在右手）----------
+  // ---------- 武器：能量刃（右手）----------
   const weapon = new THREE.Group();
   const bladeShape = new THREE.Shape();
   bladeShape.moveTo(-0.05, 0);
-  bladeShape.lineTo(-0.06, 0.5);
-  bladeShape.lineTo(0, 0.72);
-  bladeShape.lineTo(0.06, 0.5);
+  bladeShape.lineTo(-0.055, 0.55);
+  bladeShape.lineTo(0, 0.76);
+  bladeShape.lineTo(0.055, 0.55);
   bladeShape.lineTo(0.05, 0);
   bladeShape.closePath();
   const blade = new THREE.Mesh(
-    new THREE.ExtrudeGeometry(bladeShape, { depth: 0.02, bevelEnabled: true, bevelSize: 0.01, bevelThickness: 0.008, bevelSegments: 1 }),
+    new THREE.ExtrudeGeometry(bladeShape, { depth: 0.02, bevelEnabled: true, bevelSize: 0.012, bevelThickness: 0.01, bevelSegments: 1 }),
     M.metal,
   );
-  meshShadow(blade);
-  const edge = new THREE.Mesh(
-    new THREE.ExtrudeGeometry(bladeShape, { depth: 0.006, bevelEnabled: false }),
-    new THREE.MeshStandardMaterial({ color: PALETTE.trim, emissive: PALETTE.trim, emissiveIntensity: 2.2 }),
+  shadow(blade);
+  const edgeGlow = new THREE.Mesh(
+    new THREE.ExtrudeGeometry(bladeShape, { depth: 0.008, bevelEnabled: false }),
+    new THREE.MeshStandardMaterial({ color: PAL.trim, emissive: PAL.trim, emissiveIntensity: 2.4 }),
   );
-  edge.scale.set(0.6, 0.95, 1);
-  edge.position.z = 0.024;
-  blade.add(edge);
-  blade.position.y = 0.18;
+  edgeGlow.scale.set(0.55, 0.96, 1);
+  edgeGlow.position.z = 0.026;
+  blade.add(edgeGlow);
+  blade.position.y = 0.2;
   weapon.add(blade);
-  const guard = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.04, 0.06), M.trim);
-  guard.position.y = 0.16;
+  const guard = new THREE.Mesh(new THREE.CapsuleGeometry(0.03, 0.2, 4, 8), M.trim);
+  guard.rotation.z = Math.PI / 2;
+  guard.position.y = 0.18;
   weapon.add(guard);
-  const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.035, 0.2, 10), M.leather);
-  grip.position.y = 0.05;
+  const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.032, 0.22, 12), M.leather);
+  grip.position.y = 0.06;
   weapon.add(grip);
-  weapon.position.set(0, -0.02, 0.06);
+  weapon.position.set(0, -0.02, 0.05);
   weapon.rotation.set(-1.5, 0, 0);
   handR.add(weapon);
 
-  // ---------- 初始姿态（A-pose 微调，更自然）----------
-  rig.arm_l.shoulder.rotation.z = 0.28;
-  rig.arm_r.shoulder.rotation.z = -0.28;
-  rig.arm_l.upperArm.rotation.z = 0.12;
-  rig.arm_r.upperArm.rotation.z = -0.12;
-  rig.arm_l.forearm.rotation.x = -0.25;
-  rig.arm_r.forearm.rotation.x = -0.55;
-  rig.arm_l.forearm.rotation.z = 0.1;
-  rig.arm_r.forearm.rotation.z = -0.1;
-  rig.leg_l.hip.rotation.z = 0.03;
-  rig.leg_r.hip.rotation.z = -0.03;
+  // ---------- 初始姿态 ----------
+  rig.arm_l.shoulder.rotation.z = 0.24;
+  rig.arm_r.shoulder.rotation.z = -0.24;
+  rig.arm_l.upperArm.rotation.z = 0.1;
+  rig.arm_r.upperArm.rotation.z = -0.1;
+  rig.arm_l.forearm.rotation.x = -0.3;
+  rig.arm_r.forearm.rotation.x = -0.6;
+  rig.arm_l.forearm.rotation.z = 0.12;
+  rig.arm_r.forearm.rotation.z = -0.12;
+  rig.leg_l.hip.rotation.z = 0.02;
+  rig.leg_r.hip.rotation.z = -0.02;
 
-  // 让所有网格都投/收阴影
-  root.traverse((o) => {
-    if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; }
-  });
+  root.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
 
   // ---------- 待机动画 ----------
   function update(t) {
     const breathe = Math.sin(t * 1.6);
     const sway = Math.sin(t * 0.9);
 
-    // 呼吸：胸腔起伏
-    rig.chest.scale.set(1 + breathe * 0.012, 1 + breathe * 0.02, 1 + breathe * 0.012);
-    rig.chest.position.y = 0.82 + breathe * 0.02;
+    rig.chest.scale.set(1 + breathe * 0.01, 1 + breathe * 0.018, 1 + breathe * 0.01);
+    rig.chest.position.y = 0.78 + breathe * 0.018;
 
-    // 重心轻微左右
     rig.hips.position.x = sway * 0.03;
-    rig.hips.rotation.z = sway * 0.015;
-    rig.spine.rotation.z = -sway * 0.02;
-    rig.chest.rotation.z = -sway * 0.015;
+    rig.hips.rotation.z = sway * 0.014;
+    rig.spine.rotation.z = -sway * 0.018;
+    rig.chest.rotation.z = -sway * 0.014;
 
-    // 头部环视
-    rig.head.rotation.y = Math.sin(t * 0.45) * 0.18;
+    rig.head.rotation.y = Math.sin(t * 0.45) * 0.16;
     rig.head.rotation.x = Math.sin(t * 0.7) * 0.04 - 0.02;
 
-    // 手臂随呼吸轻摆
-    rig.arm_l.shoulder.rotation.z = 0.28 + breathe * 0.02;
-    rig.arm_r.shoulder.rotation.z = -0.28 - breathe * 0.02;
-    rig.arm_l.forearm.rotation.x = -0.25 + Math.sin(t * 1.6 + 1) * 0.03;
-    rig.arm_r.forearm.rotation.x = -0.55 + Math.sin(t * 1.6) * 0.03;
+    rig.arm_l.shoulder.rotation.z = 0.24 + breathe * 0.018;
+    rig.arm_r.shoulder.rotation.z = -0.24 - breathe * 0.018;
+    rig.arm_l.forearm.rotation.x = -0.3 + Math.sin(t * 1.6 + 1) * 0.03;
+    rig.arm_r.forearm.rotation.x = -0.6 + Math.sin(t * 1.6) * 0.03;
 
-    // 核心脉动
-    const pulse = 0.9 + Math.sin(t * 3) * 0.25;
-    M.trim.emissiveIntensity = 1.3 + Math.sin(t * 3) * 0.4;
-    rig.core.scale.setScalar(pulse);
+    M.trim.emissiveIntensity = 1.1 + Math.sin(t * 3) * 0.35;
+    rig.core.scale.setScalar(0.9 + Math.sin(t * 3) * 0.2);
     rig.core.rotation.y = t * 0.8;
     rig.core.rotation.x = t * 0.5;
 
-    // 马尾摆动
-    rig.ponytail.rotation.x = 0.5 + Math.sin(t * 2) * 0.08;
+    rig.ponytail.rotation.x = 0.55 + Math.sin(t * 2) * 0.08;
     rig.ponytail.rotation.z = Math.sin(t * 1.3) * 0.06;
 
-    // 披风飘动（顶点波浪）
+    // 披风飘动
     const pos = rig.cape.geometry.attributes.position;
     const arr = pos.array;
     for (let i = 0; i < arr.length; i += 3) {
-      const bx = capeBase[i];
-      const by = capeBase[i + 1];
-      // 越往下摆动越大
-      const droop = (capeH / 2 - by) / capeH; // 0(top)~1(bottom)
-      const wave =
-        Math.sin(t * 2 + bx * 3 + by * 2) * 0.08 * droop +
-        Math.sin(t * 1.3 + bx * 2) * 0.05 * droop;
+      const bx = capeBase[i], by = capeBase[i + 1];
+      const droop = (capeH / 2 - by) / capeH;
+      const wave = Math.sin(t * 2 + bx * 3 + by * 2) * 0.08 * droop + Math.sin(t * 1.3 + bx * 2) * 0.05 * droop;
       arr[i] = bx + Math.sin(t + by) * 0.02 * droop;
-      arr[i + 1] = by;
-      arr[i + 2] = capeBase[i + 2] - wave - droop * 0.35; // 自然内凹披落
+      arr[i + 2] = capeBase[i + 2] - wave - droop * 0.4;
     }
     pos.needsUpdate = true;
     rig.cape.geometry.computeVertexNormals();
-    rig.capeTrim.position.z = -0.35 + Math.sin(t * 1.5) * 0.04;
+    rig.capeTrim.position.z = -0.4 + Math.sin(t * 1.5) * 0.04;
   }
 
   return { root, rig, update };

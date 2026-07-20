@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <meta name="theme-color" content="#05070d">
+  <title>生成式英雄 · 黄金女武神 V6</title>
+  <link rel="stylesheet" href="./style.css">
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "../vendor/three.module.js",
+        "three/addons/": "../vendor/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <main id="app">
+    <div id="stage" aria-label="可旋转的三维英雄模型"></div>
+    <div class="vignette"></div>
+
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">ARENA 3D · IMPORTED HEROES / V6</p>
+        <h1>外部模型接入</h1>
+        <p class="subtitle">FBX 生成模型 → 转 GLB → 接入引擎 · 带骨骼动画</p>
+      </div>
+      <div class="quality-badge"><span></span> 65 骨骼 · 待机战斗动作</div>
+    </header>
+
+    <section class="hero-card" aria-label="模型说明">
+      <div class="role-mark" id="heroRole">剑士</div>
+      <p class="hero-kicker">MOBA HERO · IMPORTED</p>
+      <h2 id="heroName">黄金女武神 · 玛丽亚</h2>
+      <p id="heroDesc">外部生成的角色模型经 FBX→GLB 转换、贴图压缩优化后接入项目管线，保留全套骨骼与「待机→战斗待机」动作，直接由引擎实时驱动。</p>
+      <div class="stats">
+        <span>Mixamo 骨骼</span>
+        <span>FBX→GLB→WebP</span>
+        <span>引擎实时驱动</span>
+      </div>
+    </section>
+
+    <div class="gesture-hint">单指旋转 · 双指缩放 · 滚轮拉近</div>
+
+    <nav class="action-bar" aria-label="操作">
+      <button class="model-btn active" data-key="valkyrie"><i>⚔</i><span>女武神</span></button>
+      <button class="model-btn" data-key="casual"><i>🚶</i><span>旅者</span></button>
+      <button class="action active" id="spin"><i>⟳</i><span>自动旋转</span></button>
+    </nav>
+
+    <section id="loading" class="loading" aria-live="polite">
+      <div class="loader-ring"></div>
+      <p>正在载入英雄...</p>
+      <small id="loading-detail">读取模型与贴图</small>
+    </section>
+
+    <section id="error-panel" class="error-panel" hidden>
+      <h2>模型没有加载成功</h2>
+      <p id="error-message"></p>
+      <button onclick="location.reload()">重新加载</button>
+    </section>
+  </main>
+
+  <script type="module" src="./showcase.js"></script>
+</body>
+</html>
